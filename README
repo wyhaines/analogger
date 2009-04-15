@@ -1,0 +1,19 @@
+Swiftcore Analogger 0.5
+
+Homepage::  http://analogger.swiftcore.org
+Copyright:: (C) 2007 by Kirk Haines. All Rights Reserved.
+Email:: wyhaines@gmail.com
+License:: Ruby's License
+
+The Swiftcore Analogger implements a fast asynchronous logging system
+for Ruby programs as well as client library for sending logging messages
+to the Analogger process.
+
+Analogger will accept logs from multiple sources and can have multiple
+logging destinations.  Currently, logging to a file, to STDOUT, or to
+STDERR is supported.  A future revision may support logging to a
+database destination, as well.
+
+Analogger depends on EventMachine (http://rubyforge.org/projects/eventmachine)
+to provide the framework for the network communications, though EM is
+not used for the client library.

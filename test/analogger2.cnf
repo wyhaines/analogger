@@ -1,0 +1,9 @@
+port: 47990
+host: 127.0.0.1
+default_log: log/default.log
+daemonize: false
+syncinterval: 15
+logs:
+- service: speed
+  logfile:  log/speed.log
+  cull: true

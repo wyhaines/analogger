@@ -1,0 +1,22 @@
+port: 47990
+host: 127.0.0.1
+default_log: log/default.log
+daemonize: false
+syncinterval: 1
+pidfile: log/analogger.pid
+logs:
+- service:
+  - a
+  - b
+  logfile: log/a.log
+  cull: true
+  levels: a,b,c,d
+- service: c
+  logfile:  log/c.log
+  cull: true
+- service: d
+  logfile: log/d.log
+  cull: false
+- service: stderr
+  logfile: STDERR
+  cull: true

@@ -1,0 +1,60 @@
+Swiftcore Analogger 0.5
+
+Homepage::  http://analogger.swiftcore.org
+Copyright:: (C) 2007 by Kirk Haines. All Rights Reserved.
+Email:: wyhaines@gmail.com
+
+
+Installation
+------------
+
+To install analogger:
+
+ruby setup.rb
+
+The analogger executable will be installed into the ruby installation's
+bindir, along with server and client libraries into the site_lib.  The
+rdoc documentation will also be generated.
+
+ruby setup.rb --help
+
+to se a full list of options.
+
+
+Quickstart
+----------
+
+To start an Analogger instance, first create a configuration file:
+
+port: 6766
+host: 127.0.0.1
+default_log: /var/log/weblogs/default
+daemonize: true
+syncinterval: 60
+logs:
+- service: bigapp
+  logfile:  /var/log/bigapp
+  cull: true
+- service:
+  - smallapp1
+  - smallapp2
+  logfile: /var/log/smallapps
+  cull: true
+- service: newsletter_sender
+  logfile: /var/log/newsletter.log
+  cull: false
+
+
+Then start the analogger:
+
+/usr/bin/env analogger -c config_file
+
+
+To use the client library to connect to an Analogger instance and send
+logging messages to it:
+
+require 'swiftcore/Analogger/Client'
+
+logger = Swiftcore::Analogger::Client.new('smallapp1','127.0.0.1','6766')
+
+logger.log('info','This is a log message.')
