@@ -1,35 +1,36 @@
 #####
 # Swiftcore Analogger
 #   http://analogger.swiftcore.org
-#   Copyright 2007 Kirk Haines
+#   Copyright 2007-2014 Kirk Haines
+#   wyhaines@gmail.com
 #
-#   Licensed under the Ruby License.  See the README for details.
+#   MIT License.
 #
 #####
 
 spec = Gem::Specification.new do |s|
-  s.name              = 'analogger'
-  s.author            = %q(Kirk Haines)
-  s.email             = %q(wyhaines@gmail.com)
-  s.version           = '0.5.0'
-  s.summary           = %q(A fast asynchronous logging service and client for Ruby.)
-  s.platform          = Gem::Platform::RUBY
+  s.name = 'analogger'
+  s.author = %q(Kirk Haines)
+  s.email = %q(wyhaines@gmail.com)
+  s.version = '0.5.1'
+  s.summary = %q(A fast asynchronous logging service and client for Ruby.)
+  s.platform = Gem::Platform::RUBY
 
-  s.has_rdoc          = true
-  s.rdoc_options      = %w(--title Swiftcore::Analogger --main README --line-numbers)
-  s.extra_rdoc_files  = %w(README)
+  s.has_rdoc = true
+  s.rdoc_options = %w(--title Swiftcore::Analogger --main README --line-numbers)
+  s.extra_rdoc_files = %w(README)
 
   s.files = Dir['**/*']
-	s.executables = %w(analogger)
-	s.require_paths = %w(src)
+  s.executables = %w(analogger)
+  s.require_paths = %w(src)
 
-	s.requirements      << "Eventmachine 0.7.0 or higher."
-	s.add_dependency('eventmachine')
+  s.requirements << "Eventmachine 0.7.0 or higher."
+  s.add_dependency('eventmachine')
   s.test_files = ['test/TC_Analogger.rb']
 
   s.rubyforge_project = %q(analogger)
-  s.homepage          = %q(http://analogger.swiftcore.org/)
-  description         = []
+  s.homepage = %q(http://analogger.swiftcore.org/)
+  description = []
   File.open("README") do |file|
     file.each do |line|
       line.chomp!
