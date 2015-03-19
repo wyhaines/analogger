@@ -2,12 +2,14 @@ module Swiftcore
 	class AnaloggerProtocol < EventMachine::Connection
 
 		def setup
+File.open("/tmp/a.out","a+") {|fh| fh.puts "connection: setup" }
 			@length = nil
 			@logchunk = ''
 			@authenticated = nil
 		end
 
     def receive_data data
+File.open("/tmp/a.out","a+") {|fh| fh.puts "connection: received: #{data}" }
       @logchunk << data
       decompose = true
       while decompose
@@ -37,13 +39,18 @@ module Swiftcore
 
         if @length and @logchunk.length > @length
           msg = @logchunk.slice!(0..@length).split(Rcolon,4)
-          unless @authenticated
+          
+          unless @authenticated  ##### Handle authentication
             if msg.last == LoggerClass.key
               @authenticated = true
+File.open("/tmp/a.out","a+") {|fh| fh.puts "connection: accepted"}
+              send_data "accepted\n"
             else
-              close_connection
+File.open("/tmp/a.out","a+") {|fh| fh.puts "connection: denied"}
+							send_data "denied\n"
+              close_connection_after_writing
             end
-          else
+          else ##### The client has been authenticated
             msg[0] = nil
             msg.shift
             LoggerClass.add_log(msg)
@@ -56,3 +63,11 @@ module Swiftcore
 		end
 	end
 end
+
+# TODO:
+#
+#   The security key is pretty insecure right now.  Client and server should be
+#   able to use SSL, and even when not using SSL, authentication should be more
+#   secure.  Maybe client talks to server and gets a one-time key that is uses
+#   to encrypt the security key.  It passes the security key to the server, which
+#   compares it to it's own one-time-encrypted version.

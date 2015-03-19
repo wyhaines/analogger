@@ -3,15 +3,15 @@
 require 'yaml'
 require 'optparse'
 begin
-  load_attempted ||= false
-  require 'swiftcore/Analogger'
+	load_attempted ||= false
+	require 'swiftcore/Analogger'
 rescue LoadError => e
-  unless load_attempted
-    load_attempted = true
-    require 'rubygems'
-    retry
-  end
-  raise e
+	unless load_attempted
+		load_attempted = true
+		require 'rubygems'
+		retry
+	end
+	raise e
 end
 
 #####
@@ -31,66 +31,66 @@ end
 #####
 
 module Swiftcore
-  class AnaloggerExec
-    def self.parse_options(config = {})
-      # Config file to read
-      #
-      # port: 12345
-      # secret: abcdef
-      # interval: 1
-      # default_log: /var/log/emlogger
-      # logs:
-      # - service: client1
-      #   levels: info
-      #   logfile: /foo/bar.txt
-      #   cull: true
-      #   
-      OptionParser.new do |opts|
-        opts.banner = 'Usage: analogger.rb [options]'
-        opts.separator ''
-        opts.on('-c','--config CONFFILE',"The configuration file to read.") do |conf|
-          config = YAML.load(File.read(conf))
-        end
-        opts.on('-p','--port [PORT]',Integer,"The port to receive connections on.") do |port|
-          config[Swiftcore::Analogger::Cport] = port
-        end
-        opts.on('-h','--host [HOST]',String,"The host to bind the connection to.") do |host|
-          config[Swiftcore::Analogger::Chost] = host
-        end
-#       opts.on('-r','--controlkey [KEY]',String,"The secret key that authenticates a control session.") do |secret|
-#         config[Swiftcore::Analogger::Csecret] = secret
-#       end
-        opts.on('-k','--key [KEY]',String,"The secret key that authenticates a valid client session.") do |secret|
-          config[Swiftcore::Analogger::Ckey] = secret
-        end
-        opts.on('-i','--interval [INTERVAL]',Integer,"The interval between queue writes.  Defaults to 1 second.") do |interval|
-          config[Swiftcore::Analogger::Cinterval] = interval
-        end
-        opts.on('-s','--syncinterval [INTERVAL]',Integer,"The interval between queue syncs.  Defaults to 60 seconds.") do |interval|
-          config[Swiftcore::Analogger::Csyncinterval] = interval
-        end
-        opts.on('-d','--default [PATH]',String,"The default log destination.  Defaults to stdout.") do |default|
-          config[Swiftcore::Analogger::Cdefault_log] = default
-        end
-        opts.on('-x','--daemonize',"Tell the Analogger to daemonize itself.") do
-          config[Swiftcore::Analogger::Cdaemonize] = true
-        end
-        opts.on('-w','--writepid [FILENAME]',"The filename to write a PID file to.") do |pidfile|
-          config[Swiftcore::Analogger::Cpidfile] = pidfile || 'analogger.pid'
-        end
-      end.parse!
-      config
-    end
+	class AnaloggerExec
+		def self.parse_options(config = {})
+			# Config file to read
+			#
+			# port: 12345
+			# secret: abcdef
+			# interval: 1
+			# default_log: /var/log/emlogger
+			# logs:
+			# - service: client1
+			#   levels: info
+			#   logfile: /foo/bar.txt
+			#   cull: true
+			#   
+			OptionParser.new do |opts|
+				opts.banner = 'Usage: analogger.rb [options]'
+				opts.separator ''
+				opts.on('-c','--config CONFFILE',"The configuration file to read.") do |conf|
+					config = YAML.load(File.read(conf))
+				end
+				opts.on('-p','--port [PORT]',Integer,"The port to receive connections on.") do |port|
+					config[Swiftcore::Analogger::Cport] = port
+				end
+				opts.on('-h','--host [HOST]',String,"The host to bind the connection to.") do |host|
+					config[Swiftcore::Analogger::Chost] = host
+				end
+#				opts.on('-r','--controlkey [KEY]',String,"The secret key that authenticates a control session.") do |secret|
+#					config[Swiftcore::Analogger::Csecret] = secret
+#				end
+				opts.on('-k','--key [KEY]',String,"The secret key that authenticates a valid client session.") do |secret|
+					config[Swiftcore::Analogger::Ckey] = secret
+				end
+				opts.on('-i','--interval [INTERVAL]',Integer,"The interval between queue writes.  Defaults to 1 second.") do |interval|
+					config[Swiftcore::Analogger::Cinterval] = interval
+				end
+				opts.on('-s','--syncinterval [INTERVAL]',Integer,"The interval between queue syncs.  Defaults to 60 seconds.") do |interval|
+					config[Swiftcore::Analogger::Csyncinterval] = interval
+				end
+				opts.on('-d','--default [PATH]',String,"The default log destination.  Defaults to stdout.") do |default|
+					config[Swiftcore::Analogger::Cdefault_log] = default
+				end
+				opts.on('-x','--daemonize',"Tell the Analogger to daemonize itself.") do
+					config[Swiftcore::Analogger::Cdaemonize] = true
+				end
+				opts.on('-w','--writepid [FILENAME]',"The filename to write a PID file to.") do |pidfile|
+					config[Swiftcore::Analogger::Cpidfile] = pidfile || 'analogger.pid'
+				end
+			end.parse!
+			config
+		end
 
-    def self.run
-#     Swiftcore::Analogger.start(parse_options)
-      @@parsed_options ||= parse_options
-      Swiftcore::Analogger.start(@@parsed_options)
-    end
+		def self.run
+#			Swiftcore::Analogger.start(parse_options)
+			@@parsed_options ||= parse_options
+			Swiftcore::Analogger.start(@@parsed_options)
+		end
 
-  end
+	end
 end
 
 loop do
-  catch(:hup) {Swiftcore::AnaloggerExec.run}
+	catch(:hup) {Swiftcore::AnaloggerExec.run}
 end

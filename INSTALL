@@ -1,7 +1,7 @@
 Swiftcore Analogger 0.5
 
 Homepage::  http://analogger.swiftcore.org
-Copyright:: (C) 2007-2014 by Kirk Haines. All Rights Reserved.
+Copyright:: (C) 2007 by Kirk Haines. All Rights Reserved.
 Email:: wyhaines@gmail.com
 
 
@@ -10,7 +10,15 @@ Installation
 
 To install analogger:
 
-gem install analogger
+ruby setup.rb
+
+The analogger executable will be installed into the ruby installation's
+bindir, along with server and client libraries into the site_lib.  The
+rdoc documentation will also be generated.
+
+ruby setup.rb --help
+
+to se a full list of options.
 
 
 Quickstart
