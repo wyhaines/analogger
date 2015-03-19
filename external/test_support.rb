@@ -44,7 +44,6 @@ module SwiftcoreTestSupport
 
   def self.set_src_dir
     $:.unshift File.expand_path(File.join(File.dirname(__FILE__),'../lib'))
-    puts $:.inspect
   end
 
   @announcements = {}
