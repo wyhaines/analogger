@@ -23,7 +23,7 @@ class TC_Analogger < Test::Unit::TestCase
   end
 
   def test_analogger
-    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.', :cmd => ["#{@rubybin} ../bin/analogger -c analogger.cnf"])
+    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.', :cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger.cnf"])
     sleep 1
     logger = nil
 
@@ -115,8 +115,7 @@ class TC_Analogger < Test::Unit::TestCase
 
   def speedtest(label, message)
     puts "Analogger Speedtest -- #{label}"
-    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.', :cmd => ["#{@rubybin} ../bin/analogger -c analogger2.cnf"])
-    #@analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin18} ../bin/analogger -c analogger2.cnf"])
+    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.', :cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger2.cnf"])
     logger = nil
     assert_nothing_raised { logger = Swiftcore::Analogger::Client.new('speed', '127.0.0.1', '47990') }
     lvl = 'info'
