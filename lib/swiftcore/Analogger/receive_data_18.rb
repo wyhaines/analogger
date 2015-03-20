@@ -1,12 +1,12 @@
 module Swiftcore
-	class AnaloggerProtocol < EventMachine::Connection
+  class AnaloggerProtocol < EventMachine::Connection
 
-		def setup
+    def setup
 File.open("/tmp/a.out","a+") {|fh| fh.puts "connection: setup" }
-			@length = nil
-			@logchunk = ''
-			@authenticated = nil
-		end
+      @length = nil
+      @logchunk = ''
+      @authenticated = nil
+    end
 
     def receive_data data
 File.open("/tmp/a.out","a+") {|fh| fh.puts "connection: received: #{data}" }
@@ -18,9 +18,9 @@ File.open("/tmp/a.out","a+") {|fh| fh.puts "connection: received: #{data}" }
      #       l = @logchunk[0..3].unpack(Ci).first
      #       ck = @logchunk[4..7].unpack(Ci).first
      #       if l == ck and l < MaxMessageLength
-						l = @logchunk[0..3]
-						ck = @logchunk[4..7]
-						if l == ck and (ll = l.unpack(Ci).first)
+            l = @logchunk[0..3]
+            ck = @logchunk[4..7]
+            if l == ck and (ll = l.unpack(Ci).first)
               @length = ll + 7
             else
               decompose = false
@@ -47,7 +47,7 @@ File.open("/tmp/a.out","a+") {|fh| fh.puts "connection: accepted"}
               send_data "accepted\n"
             else
 File.open("/tmp/a.out","a+") {|fh| fh.puts "connection: denied"}
-							send_data "denied\n"
+              send_data "denied\n"
               close_connection_after_writing
             end
           else ##### The client has been authenticated
@@ -60,8 +60,8 @@ File.open("/tmp/a.out","a+") {|fh| fh.puts "connection: denied"}
           decompose = false
         end
       end
-		end
-	end
+    end
+  end
 end
 
 # TODO:
