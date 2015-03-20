@@ -14,8 +14,8 @@ class TC_Analogger2 < Minitest::Test
     Dir.chdir(@@testdir)
     SwiftcoreTestSupport.announce(:analogger,"Analogger Tests")
 
-    @rubybin = File.join(::Config::CONFIG['bindir'],::Config::CONFIG['ruby_install_name'])
-    @rubybin << ::Config::CONFIG['EXEEXT']
+    @rubybin = File.join(::RbConfig::CONFIG['bindir'],::RbConfig::CONFIG['ruby_install_name'])
+    @rubybin << ::RbConfig::CONFIG['EXEEXT']
 
     @rubybin19 = '/usr/local/ruby19/bin/ruby'
     @rubybin18 = '/usr/local/ruby185/bin/ruby'
