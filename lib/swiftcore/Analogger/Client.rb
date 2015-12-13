@@ -1,4 +1,6 @@
 require 'socket'
+require 'thread'
+
 include Socket::Constants
 
 module Swiftcore
@@ -36,56 +38,134 @@ module Swiftcore
 		#
 		# The log() method takes two arguments.  The first is the severity of
 		# the message, and the second is the message itself.  The default
-		# Analogger severity levels are the same as in the standard Ruby
-		# 
+		# Analogger severity levels are the same as in the standard Ruby.
+
+    DrainTimeslice = 0.005
+    DrainMinimum = 2
+
+    # TODO: This whole mess isn't remotely threadsafe a the moment.
+
 		class Client
 			Cauthentication = 'authentication'.freeze
 			Ci = 'i'.freeze
 
-			def initialize(service = 'default', host = '127.0.0.1' , port = 6766, key = nil)
+			def initialize( service = 'default', host = '127.0.0.1' , port = 6766, key = nil, local_log_file = File.join(Dir.tmpdir,"analogger_#{$$}_#{time.now.to_i}.log") )
 				@service = service.to_s
 				@key = key
 				@host = host
 				@port = port
-				connect(host,port)
+				@local_log_file = local_log_file
+				@local_log_position_file = File.join( File.dirname(local_log_file), "#{File.basename(local_log_).gsub(/#{File.extname(local_log)}/,'')}.pos")
+				@socket = nil
+				@connected = false
+				@drain_mutex = Mutex.new
+        @file_mutex = Mutex.new
+				@local_log_is_drained = true
+        open_local_log if File.size(@local_log_file) > 0 && read_local_log_pos > 0
+				connect( host, port )
 			end
 
-			def connect(host,port)
+			def connect( host, port )
 				tries ||= 0
-				@socket = Socket.new(AF_INET,SOCK_STREAM,0)
-				sockaddr = Socket.pack_sockaddr_in(port,host)
-				@socket.connect(sockaddr)
-				log(Cauthentication,"#{@key}")
+				@socket = Socket.new( AF_INET, SOCK_STREAM, 0 )
+				sockaddr = Socket.pack_sockaddr_in( port, host )
+				@socket.connect( sockaddr )
+				log( Cauthentication, "#{@key}" )
+				@connected = true
+			rescue Exception => e
+				@connected = false
+				if tries < 3
+					tries += 1
+					@socket.close if @socket and !@socket.closed?
+					@socket = nil
+					select( nil, nil, nil, tries * 0.2 ) if tries > 0
+					retry
+				else
+					if @local_log_file
+						open_local_log
+					else
+					  raise e
+					end
+				end
+			end
+
+			def reconnect
+				connect( @host, @port )
+			end
+
+			def open_local_log
+				@local_log = FIle.open( @local_log_file, "a+" ) unless @local_log
+				@local_log_pos = read_local_log_pos
+			end
+
+      def read_local_log_pos
+        @file_mutex.synchronize do
+          File.exist?( @local_log_file_pos ) ? File.read( @local_log_file_pos ).chomp.to_i : 0
+        end
+      end
+
+      def write_local_log_pos( pos )
+        @file_mutex.synchronize do
+          File.open( @local_log_file_pos, "w+" ) {|fh| fh.write pos}
+        end
+      end
+
+			def log( severity, msg )
+				tries ||= 0
+				len = [ @service.length + severity.length + msg.length + 3 ].pack( Ci )
+				message = "#{len}#{len}:#{@service}:#{severity}:#{msg}"
+				if @local_log
+          @file_mutex.synchronize do
+					  @local_log.write message
+          end
+				end
+
+				if @socket && @local_log
+					drain_local_log
+				elsif @socket
+				  @socket.write message
+				end
 			rescue Exception => e
 				if tries < 3
 					tries += 1
 					@socket.close if @socket and !@socket.closed?
 					@socket = nil
-					select(nil,nil,nil,tries * 0.2) if tries > 0
+					select( nil, nil, nil, tries ) if tries > 0
+					reconnect
 					retry
 				else
 					raise e
 				end
 			end
 
-			def reconnect
-				connect(@host,@port)
-			end
+			def drain_local_log
+				@drain_mutex.synchronize do
+          pos = read_local_log_pos
+          if @local_log && ( pos < @local_log.pos )
+            @local_log.seek pos
+            now = Time.now.to_f
+            count = 0
+            while ( count < DrainMinimum ) && ( Time.now.to_f < ( now + DrainTimeslice ) )
+              rec = @local_log.readline.chomp
+              @socket.write rec
+              count += 1
+              if @local_log.pos == @local_log.size
+                write_local_log_pos 0
+                @local_log.close
+                @local_log = nil
+                break
+              else
+                write_local_log_pos @local_log.pos
+              end
+            end
+          end
 
-			def log(severity,msg)
-				tries ||= 0
-				len = [@service.length + severity.length + msg.length + 3].pack(Ci)
-				@socket.write "#{len}#{len}:#{@service}:#{severity}:#{msg}"
-			rescue Exception => e
-				if tries < 3
-					tries += 1
-					@socket.close if @socket and !@socket.closed?
-					@socket = nil
-					select(nil,nil,nil,tries) if tries > 0
-					reconnect
-					retry
-				else
-					raise e
+          if @local_log # It must not have been drained
+            Thread.new do
+              sleep 0.1
+              drain_local_log
+            end
+          end
 				end
 			end
 
