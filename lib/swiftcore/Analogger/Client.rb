@@ -1,5 +1,6 @@
 require 'socket'
 require 'thread'
+require 'tmpdir'
 
 include Socket::Constants
 
@@ -49,13 +50,13 @@ module Swiftcore
 			Cauthentication = 'authentication'.freeze
 			Ci = 'i'.freeze
 
-			def initialize( service = 'default', host = '127.0.0.1' , port = 6766, key = nil, local_log_file = File.join(Dir.tmpdir,"analogger_#{$$}_#{time.now.to_i}.log") )
+			def initialize( service = 'default', host = '127.0.0.1' , port = 6766, key = nil, local_log_file = File.join(Dir.tmpdir,"analogger_#{$$}_#{Time.now.to_i}.log") )
 				@service = service.to_s
 				@key = key
 				@host = host
 				@port = port
 				@local_log_file = local_log_file
-				@local_log_position_file = File.join( File.dirname(local_log_file), "#{File.basename(local_log_).gsub(/#{File.extname(local_log)}/,'')}.pos")
+				@local_log_position_file = File.join( File.dirname(local_log_file), "#{File.basename(local_log_file).gsub(/#{File.extname(local_log_file)}/,'')}.pos")
 				@socket = nil
 				@connected = false
 				@drain_mutex = Mutex.new
