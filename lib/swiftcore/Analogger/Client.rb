@@ -62,7 +62,7 @@ module Swiftcore
 				@drain_mutex = Mutex.new
         @file_mutex = Mutex.new
 				@local_log_is_drained = true
-        open_local_log if File.size(@local_log_file) > 0 && read_local_log_pos > 0
+        open_local_log if File.exist?(@local_log_file) && File.size(@local_log_file) > 0 && read_local_log_pos > 0
 				connect( host, port )
 			end
 
