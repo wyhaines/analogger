@@ -6,7 +6,9 @@ SwiftcoreTestSupport.set_src_dir
 require 'swiftcore/Analogger/Client'
 
 class TC_Analogger < Minitest::Test
-
+  # TODO: This testing framework is ancient. Better testing should be written.
+  # The tests are all basically functional tests, for better or for worse.
+  #
   @@testdir = SwiftcoreTestSupport.test_dir(__FILE__)
 
   def setup
@@ -15,12 +17,10 @@ class TC_Analogger < Minitest::Test
 
     @rubybin = File.join(::RbConfig::CONFIG['bindir'],::RbConfig::CONFIG['ruby_install_name'])
     @rubybin << ::RbConfig::CONFIG['EXEEXT']
-
-    @rubybin19 = '/usr/local/ruby19/bin/ruby'
-    @rubybin18 = '/usr/local/ruby185/bin/ruby'
   end
 
   def test_analogger
+    cmd = "#{@rubybin} -I../lib ../bin/analogger -c analogger.cnf -w log/analogger.pid"
     @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger.cnf -w log/analogger.pid"])
     sleep 3
     logger = nil
@@ -34,7 +34,6 @@ class TC_Analogger < Minitest::Test
     levels = ['debug','info','warn']
 
     logger = Swiftcore::Analogger::Client.new('idontmatch','127.0.0.1','47990')
-puts "1"
 
     levels.each do |level|
       logger.log(level,'abc123')
@@ -43,24 +42,20 @@ puts "1"
     levels = ['a','b','c']
 
     logger = Swiftcore::Analogger::Client.new('a','127.0.0.1','47990')
-puts "2"
 
     levels.each do |level|
       logger.log(level,'abc123')
     end
 
     logger = Swiftcore::Analogger::Client.new('b','127.0.0.1','47990')
-puts "3"
 
     levels.each do |level|
       logger.log(level,'abc123')
-puts "4 #{level}"
     end
 
     levels = ['info','warn','fatal']
 
     logger = Swiftcore::Analogger::Client.new('c','127.0.0.1','47990')
-puts "5"
 
     levels.each do |level|
       logger.log(level,'abc123')
@@ -112,37 +107,67 @@ puts "5"
 
     speedtest('short messages','0123456789')
     speedtest('larger messages','0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789')
+    speedtest('Fail Analogger, continue logging locally, and monitor for Analogger return, then drain queue of local logs', '00000',0.9995)
     logger_speedtest('short messages','0123456789')
     logger_speedtest('larger messages','0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789')
   end
 
-  def speedtest(label,message)
+  def speedtest(label,message, random_failures = 1)
     puts "Analogger Speedtest -- #{label}"
-    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger2.cnf"])
+    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger2.cnf -w log/analogger.pid"])
+    sleep 3
+
+    _speedtest(message, random_failures)
+  end
+
+  def _speedtest(message, random_failures)
+    count = 100000
     logger = nil
     logger = Swiftcore::Analogger::Client.new('speed','127.0.0.1','47990')
     lvl = 'info'
-    puts "Testing 50000 messages of #{message.length} bytes each."
+    puts "Testing #{count} messages of #{message.length} bytes each."
     start = total = nil
-#   Benchmark.bm do |bm|
-#     bm.report { start = Time.now; 100000.times { logger.log(lvl,message) }; total = Time.now - start}
-#   end
-    start = Time.now; 50000.times { logger.log(lvl,message) }; total = Time.now - start
+    start = Time.now
+    if random_failures < 1
+      count.times do |cnt|
+        # At some random point, kill the Analogger process.
+        if @analogger_pid && ( rand() > random_failures )
+          Process.kill "SIGTERM", @analogger_pid
+          Process.wait @analogger_pid
+          @analogger_pid = nil
+        end
+
+        # The logger client will detect that Analogger is down, and start logging locally.
+        logger.log(lvl, message)
+
+        message.next! # Increment messages
+      end
+    else
+      count.times {logger.log(lvl,message)}
+    end
     total = Time.now - start
-    rate = 50000 / total
+
+    unless @analogger_pid
+      @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger2.cnf -w log/analogger.pid"])
+    end
+    sleep 3
+
+    rate = count / total
     puts "\nMessage rate: #{rate}/second (#{total})\n\n"
+    sleep 5
     teardown
   end
 
   def logger_speedtest(label,message)
-    puts "Ruby Logger Speedtest -- #{label}"
+    count = 100000
+    puts "Ruby Logger Speedtest (local file logging only) -- #{label}"
     puts "Testing 100000 messages of #{message.length} bytes each."
     logger = Logger.new('log/ra')
     start = total = nil
     Benchmark.bm do |bm|
-      bm.report { start = Time.now; 100000.times { logger.info(message) }; total = Time.now - start}
+      bm.report { start = Time.now; count.times { logger.info(message) }; total = Time.now - start}
     end
-    rate = 100000 / total
+    rate = count / total
     puts "\nMessage rate: #{rate}/second (#{total})\n\n"
     logger.close
     File.delete('log/ra')
@@ -151,7 +176,7 @@ puts "5"
   def teardown
     Process.kill "SIGTERM",@analogger_pid
     Process.wait @analogger_pid
-    Dir['log/*'].each {|fn| File.delete(fn)}
+    #Dir['log/*'].each {|fn| File.delete(fn)}
   rescue
   end
 

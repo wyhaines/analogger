@@ -1,5 +1,6 @@
 require 'tmpdir'
 require 'socket'
+
 include Socket::Constants
 
 module Swiftcore
@@ -9,7 +10,7 @@ module Swiftcore
     # messages to the Swift Analogger asynchronous logging server.
     #
     # To use the Analogger client, instantiate an instance of the Client
-    # class.  
+    # class.
     #
     #   logger = Swift::Analogger::Client.new(:myapplog,'127.0.0.1',12345)
     #
@@ -38,43 +39,54 @@ module Swiftcore
     # The log() method takes two arguments.  The first is the severity of
     # the message, and the second is the message itself.  The default
     # Analogger severity levels are the same as in the standard Ruby
-    # 
+    #
     class Client
+
+      class FailedToAuthenticate < StandardError
+        def initialize(hots = "UNK", port = 6766)
+          super("Failed to authenticate to the Analogger server at #{destination}:#{port}")
+        end
+      end
+
       Cauthentication = 'authentication'.freeze
       Ci = 'i'.freeze
-      
-      ConnectionFailureTimeout = 600
-      MaxFailureCount = (2**(0.size * 8 -2) -1) # Max integer -- i.e. really big
-      PersistentQueueLimit = 10485760
-      RamQueueLimit = 129152
-      ReconnectThrottleInterval = 2
-      
-      UnauthenticatedLog = <<ECODE.freeze
-def log(severity, msg)
-  # 
-File.open("/tmp/a.out","a+") {|fh| fh.puts "client: unauthenticated log"}
-end
-ECODE
 
-      AuthenticatedLog = <<'ECODE'.freeze
-def log(severity,msg)
-File.open("/tmp/a.out","a+") {|fh| fh.puts "client: authenticated log"}
-  len = [@service.length + severity.length + msg.length + 3].pack(Ci)
-File.open("/tmp/a.out","a+") {|fh| fh.puts "client: authenticated log #{len}"}
-  @socket.write "#{len}#{len}:#{@service}:#{severity}:#{msg}"
-File.open("/tmp/a.out","a+") {|fh| fh.puts "client: authenticated log #{len}#{len}:#{@service}:#{severity}:#{msg}"}
-rescue Exception => e
-  @authenticated = false
-  # TODO:  Add code to deal with connection failure
-end
-ECODE
+      MaxMessageLength = 8192
+      MaxLengthBytes = MaxMessageLength.to_s.length
+      Semaphore = "||"
+      ConnectionFailureTimeout = 86400 * 2 # Log locally for a long time if Analogger server goes down.
+      MaxFailureCount = (2**(0.size * 8 -2) -1) # Max integer -- i.e. really big
+      PersistentQueueLimit = 10737412742 # Default to allowing around 10GB temporary local log storage
+      ReconnectThrottleInterval = 0.1
+
+      def log(severity, msg)
+        if @destination == :local
+          # Log locally. The reason can be authentication failure or connection failure.
+          # The end result is the same. We can't send logs to the server, so we write them
+          # locally. The default behavior is to push them into a local queue.
+          # If a connection is established, but the local log still has content, a thread
+          # will be started to drain the local log as quickly as possible. When it is
+          # fully drained, the client will switch to logging remotely directly.
+          # For this reason, logging to a local log is synchronized by a mutex so that the
+          # log writing to the local file can be paused when necessary.
+          @log_throttle.synchronize do
+            _local_log(@service, severity, msg)
+          end
+        else
+          _remote_log(@service, severity, msg)
+        end
+      rescue Exception => e
+        @authenticated = false
+        setup_local_logging
+        setup_reconnect_thread
+      end
 
     #----- Various class accessors -- use these to set defaults
 
       def self.connection_failure_timeout
         @connection_failure_timeout || ConnectionFailureTimeout
       end
-      
+
       def self.connection_failure_timeout=(val)
         @connection_failure_timeout = val.to_i
       end
@@ -87,34 +99,26 @@ ECODE
         @max_failure_count = val.to_i
       end
 
-      def self.ram_queue_limit
-        @ram_queue_limit || RamQueueLimit
-      end
-      
-      def self.ram_queue_limit=(val)
-        @ram_queue_limit = val.to_i
-      end
-      
       def self.persistent_queue_limit
         @persistent_queue_limit || PersistentQueueLimit
       end
-      
+
       def self.persistent_queue_limit=(val)
         @persistent_queue_limit = val.to_i
       end
 
-      def self.tmpdir
-        @tmpdir || Dir.tmpdir
+      def self.tmplog
+        @tmplog
       end
-      
-      def self.tmpdir=(val)
-        @tmpdir = val
+
+      def self.tmplog=(val)
+        @tmplog = val
       end
 
       def self.reconnect_throttle_interval
         @reconnect_throttle_interval || ReconnectThrottleInterval
       end
-      
+
       def self.reconnect_throttle_interval=(val)
         @reconnect_throttle_interval = val.to_i
       end
@@ -129,19 +133,21 @@ ECODE
         klass = self.class
         @connection_failure_timeout = klass.connection_failure_timeout
         @max_failure_count = klass.max_failure_count
-        @ram_queue_limit = klass.ram_queue_limit
         @persistent_queue_limit = klass.persistent_queue_limit
-        @tmpdir = klass.tmpdir
-        @ram_queue_size = 0
         @authenticated = false
+        @log_throttle = Mutex.new
+        @total_count = 0
 
         clear_failure
-        eval(AuthenticatedLog)
 
-        connect(host,port)
+        connect
       end
 
     #----- Various instance accessors
+
+      def total_count
+        @total_count
+      end
 
       def connection_failure_timeout
         @connection_failure_timeout
@@ -175,41 +181,83 @@ ECODE
         @persistent_queue_limit = val.to_i
       end
 
-      def tmpdir
-        @tmpdir
+      def tmplog
+        # This naming scheme is so that multiple processes which are writing to
+        # the same service can all have their own temporary log files. This is
+        # problematic, though, because ideally any unflushed temporary log
+        # files which exist should be flushed to Analogger, even if all of
+        # their creators die, or if all but one die. This is a TODO problem for
+        # another day.
+        @tmplog || File.join(Dir.tmpdir,"analogger-#{@service}-#{$$}.log")
       end
 
-      def tmpdir=(val)
-        @tmpdir = val
+      def tmplog=(val)
+        @tmplog = val
       end
 
       def reconnect_throttle_interval
-        @reconnect_throttle_interval
+        @reconnect_throttle_interval || self.class.reconnect_throttle_interval
       end
-      
+
       def reconnect_throttle_interval=(val)
         @reconnect_throttle_interval = val.to_i
       end
 
     #----- The meat of the client
 
-      def connect(host,port)
-puts "connect"
-        @socket = open_connection(host, port)
-puts "connect open"
-        send_authentication
-puts "connect send"
+      def connect
+        @socket = open_connection(@host, @port)
+        authenticate
+        raise FailedToAuthenticate(@host, @port) unless authenticated?
         clear_failure
+        if there_is_a_swamp?
+          drain_the_swamp
+        else
+          setup_remote_logging
+        end
       rescue Exception => e
-puts "connect exception #{e}"
         register_failure
-puts "connect register"
         close_connection
-puts "connect close"
+        setup_local_logging
         raise e if fail_connect?
       end
 
       private
+
+      def setup_local_logging
+        @log_throttle.synchronize do
+          @logfile = File.open(tmplog,"a+") unless @logfile && !@logfile.closed?
+          @logfile.puts "##### START"
+          @destination = :local
+        end
+      end
+
+      def setup_remote_logging
+        @destination = :remote
+      end
+
+      def setup_reconnect_thread
+        @reconnection_thread = Thread.new do
+          while true
+            sleep reconnect_throttle_interval
+            connect
+            break if @socket && !closed?
+          end
+          @reconnection_thread = nil
+        end
+      end
+
+      def _remote_log(service, severity, message)
+        @total_count += 1
+        len = MaxLengthBytes + MaxLengthBytes + service.length + severity.length + message.length + 3
+        ll = sprintf("%0#{MaxLengthBytes}i%0#{MaxLengthBytes}i", len, len)
+        @socket.write "#{ll}:#{service}:#{severity}:#{message}"
+      end
+
+      def _local_log(service, severity, message)
+        # Convert newlines to a different marker so that log messages can be stuffed onto a single file line.
+        @logfile.puts "#{service}:#{severity}:#{message.gsub(/\n/,"\x00\x00")}"
+      end
 
       def open_connection(host, port)
         socket = Socket.new(AF_INET,SOCK_STREAM,0)
@@ -248,20 +296,82 @@ puts "connect close"
         @failure_count = 0
       end
 
-      def send_authentication
-puts "send_authentication"
-        log(Cauthentication, "#{@key}")
-puts "send_authentication log"
-        response = @socket.read
-puts "send_authentication response"
-        if response =~ /accepted/
-puts "send_authentication parse authenticated"
-          eval(AuthenticatedLog)
-        else
-puts "send_authentication parse unauthenticated"
-
-          eval(UnauthenticatedLog)
+      def authenticate
+        begin
+          _remote_log(@service, Cauthentication, "#{@key}")
+          response = @socket.gets
+        rescue Exception => e
+          response = nil
         end
+
+        if response && response =~ /accepted/
+          @authenticated = true
+        else
+          @authenticated = false
+        end
+      end
+
+      def there_is_a_swamp?
+        FileTest.exists?(tmplog) && File.size(tmplog) > 0
+      end
+
+      def drain_the_swamp
+        unless @swamp_drainer
+          @swap_drainer = Thread.new { _drain_the_swamp }
+        end
+      end
+
+      def _drain_the_swamp
+        buffer = ''
+        # As soon as we start emptying the local log file, ensure that no data
+        # gets missed because of IO buffering. Otherwise, during high rates of
+        # message sending, it is possible to get an EOF on file reading, and
+        # assume all data has been sent, when there are actually records which
+        # are buffered and just haven't been written yet.
+        @logfile && ( @logfile.sync = true )
+        @logfile && @logfile.fdatasync rescue @logfile.fsync
+
+        # Guard against race conditions or other weird cases where the local
+        # log file may unexpectedly have gone missing.
+        return unless File.exists? tmplog
+
+        File.open(tmplog) do |fh|
+          total_bytes = 0
+          logfile_not_empty = true
+          while logfile_not_empty
+            @log_throttle.synchronize do
+              begin
+                buffer << fh.read_nonblock(8192) unless closed?
+              rescue EOFError
+                File.unlink(tmplog)
+                setup_remote_logging
+                logfile_not_empty = false
+              end
+            end
+            records = buffer.scan(/^.*?\n/)
+            buffer = buffer[(records.inject(0){|n,e| n += e.length})..-1] # truncate buffer
+            records.each_index do |n|
+              record = records[n]
+              next if record =~ /^\#/
+              service, severity, msg = record.split(":",3)
+              msg = msg.chomp.gsub(/\x00\x00/,"\n")
+              begin
+                _remote_log(service, severity, msg)
+              rescue
+                # FAIL while draining the swamp. Just reset the buffer from wherever we are, and
+                # keep trying, after a short sleep to allow for recovery.
+                new_buffer = ''
+                records[n..-1].each {|r| new_buffer << r}
+                new_buffer << buffer
+                buffer = new_buffer
+                sleep 1
+              end
+            end
+          end
+        end
+        @swamp_drainer = nil
+      rescue Exception => e
+          puts "OH FUCK: #{e}\n#{e.backtrace.inspect}"
       end
 
       public

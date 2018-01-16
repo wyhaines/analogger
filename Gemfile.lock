@@ -1,0 +1,19 @@
+PATH
+  remote: .
+  specs:
+    analogger (0.5.0)
+      eventmachine
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    eventmachine (1.2.5)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  analogger!
+
+BUNDLED WITH
+   1.16.1

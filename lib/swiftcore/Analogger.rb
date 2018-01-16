@@ -12,6 +12,9 @@ rescue LoadError => e
   raise e
 end
 
+
+require 'swiftcore/Analogger/AnaloggerProtocol'
+
 module Swiftcore
   class Analogger
     C_colon = ':'.freeze
@@ -63,8 +66,10 @@ module Swiftcore
         set_config_defaults
         @rcount = 0
         @wcount = 0
-        safe_trap(EXIT_SIGNALS) {cleanup;exit}
+        @server = nil
+        safe_trap(EXIT_SIGNALS) {handle_pending_and_exit}
         safe_trap(RELOAD_SIGNALS) {cleanup;throw :hup}
+
 
         #####
         # This is gross.  EM needs to change so that it defaults to the faster
@@ -75,15 +80,23 @@ module Swiftcore
         EventMachine.kqueue rescue nil
         #
         # End of gross.
+        #
+        # TODO: The above was written YEARS ago. See if EventMachine is smarter, now.
         #####
-        
+
         EventMachine.set_descriptor_table_size(4096)
         EventMachine.run {
-          EventMachine.start_server @config[Chost], @config[Cport], protocol
+          EventMachine.add_shutdown_hook do
+            write_queue
+            flush_queue
+            cleanup
+          end
+          @server = EventMachine.start_server @config[Chost], @config[Cport], protocol
           EventMachine.add_periodic_timer(1) {Analogger.update_now}
           EventMachine.add_periodic_timer(@config[Cinterval]) {write_queue}
           EventMachine.add_periodic_timer(@config[Csyncinterval]) {flush_queue}
         }
+        exit
       end
 
       def daemonize
@@ -93,7 +106,7 @@ module Swiftcore
         end
         Process.setsid
 
-                                exit if fork
+        exit if fork
 
       rescue Exception
         puts "Platform (#{RUBY_PLATFORM}) does not appear to support fork/setsid; skipping"
@@ -101,6 +114,23 @@ module Swiftcore
 
       def new_log(facility = Cdefault, levels = @config[Clevels] || DefaultSeverityLevels, log = @config[Cdefault_log], cull = true)
         Log.new({Cservice => facility, Clevels => levels, Clogfile => log, Ccull => cull})
+      end
+
+      # Before exiting, try to get any logs that are still in memory handled and written to disk.
+      def handle_pending_and_exit
+        EventMachine.stop_server(@server)
+        EventMachine.add_timer(1) do
+          _handle_pending_and_exit
+        end
+      end
+
+      def _handle_pending_and_exit
+        if any_in_queue?
+          write_queue
+          EventMachine.next_tick {_handle_pending_and_exit}
+        else
+          EventMachine.stop
+        end
       end
 
       def cleanup
@@ -197,8 +227,19 @@ module Swiftcore
         @rcount += 1
       end
 
+      def any_in_queue?
+        any = 0
+        @queue.each do |service, q|
+          q.each do |m|
+            next unless levels.has_key?(m[1])
+            any += 1
+          end
+        end
+        any > 0 ? any : false
+      end
+
       def write_queue
-        @queue.each do |service,q|
+        @queue.each do |service, q|
           last_sv = nil
           last_m = nil
           last_count = 0
@@ -231,7 +272,11 @@ module Swiftcore
       end
 
       def flush_queue
-        @logs.each_value {|l| l.logfile.fsync if l.logfile.fileno > 2}
+        @logs.each_value do |l|
+          if l.logfile.fileno > 2
+            l.logfile.fdatasync rescue l.logfile.fsync
+          end
+        end
       end
 
       def key
@@ -260,7 +305,6 @@ module Swiftcore
   class AnaloggerProtocol < EventMachine::Connection
     Ci = 'i'.freeze
     Rcolon = /:/
-    MaxMessageLength = 8192
 
     LoggerClass = Analogger
 
@@ -268,18 +312,8 @@ module Swiftcore
       setup
     end
 
-    def send_data data
-File.open("/tmp/a.out","a+") {|fh| fh.puts "connection: send_data #{data}"}
-      super
-    end
-
   end
 end
 
-case RUBY_VERSION
-when /^1.8/
-  require 'swiftcore/Analogger/receive_data_18.rb'
-else
-  require 'swiftcore/Analogger/receive_data_18.rb'
-end
+
 
