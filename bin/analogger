@@ -47,7 +47,7 @@ module Swiftcore
       #   cull: true
       #
       OptionParser.new do |opts|
-        opts.banner = 'Usage: analogger.rb [options]'
+        opts.banner = "Analogger v#{Swiftcore::Analogger::VERSION}\nUsage: analogger.rb [options]"
         opts.separator ''
         opts.on('-c', '--config CONFFILE', "The configuration file to read.") do |conf|
           config = YAML.load(File.read(conf))
@@ -78,6 +78,10 @@ module Swiftcore
         end
         opts.on('-w', '--writepid [FILENAME]', "The filename to write a PID file to.") do |pidfile|
           config[Swiftcore::Analogger::Cpidfile] = pidfile || 'analogger.pid'
+        end
+        opts.on('-v', '--version', "Show the current version of Analogger.") do
+          puts "Analogger v#{Swiftcore::Analogger::VERSION}"
+          exit
         end
       end.parse!
       config

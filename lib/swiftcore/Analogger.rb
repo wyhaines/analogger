@@ -1,4 +1,5 @@
 require 'socket'
+require 'swiftcore/Analogger/version'
 begin
   load_attempted ||= false
   require 'eventmachine'
