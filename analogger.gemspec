@@ -4,7 +4,7 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 require 'swiftcore/Analogger/version'
 
 Gem::Specification.new do |spec|
-  spec.name          = "Analogger"
+  spec.name          = "analogger"
   spec.version       = Swiftcore::Analogger::VERSION
   spec.authors       = ["Kirk Haines"]
   spec.email         = ["wyhaines@gmail.com"]

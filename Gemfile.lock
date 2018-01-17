@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    Analogger (0.9.0)
+    analogger (0.9.0)
       eventmachine (~> 1.2)
 
 GEM
@@ -15,7 +15,7 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  Analogger!
+  analogger!
   bundler (~> 1.10)
   minitest (~> 5)
   rake (~> 11.0)
