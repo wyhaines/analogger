@@ -1,3 +1,4 @@
+require "rubygems"
 # A support module for the test suite.  This provides a win32 aware
 # mechanism for doing fork/exec operations.  It requires win32/process
 # to be installed, however.
@@ -6,7 +7,7 @@ module SwiftcoreTestSupport
 	@run_modes = []
 
 	def self.create_process(args)
-		@fork_ok = true unless @fork_ok == false
+		@fork_ok = instance_variable_defined?(:@fork_ok) && @fork_ok == false ? false : true
 		pid = nil
 		begin
 			raise NotImplementedError unless @fork_ok
@@ -16,13 +17,9 @@ module SwiftcoreTestSupport
 			end
 		rescue NotImplementedError
 			@fork_ok = false
-			begin
-				require 'rubygems'
-			rescue LoadError
-			end
 
 			begin
-				require 'win32/process'
+				require "win32/process"
 			rescue LoadError
 				raise "Please install win32-process to run all tests on a Win32 platform.  'gem install win32-process' or http://rubyforge.org/projects/win32utils"
 			end

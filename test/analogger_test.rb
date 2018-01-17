@@ -1,11 +1,15 @@
+# coding: utf-8
+external = File.expand_path(File.join(File.dirname(__FILE__),'..','external'))
+puts "EXTERNAL: #{external}"
+$LOAD_PATH.unshift(external) unless $LOAD_PATH.include?(external)
 require 'minitest/autorun'
 require 'rbconfig'
 require 'logger'
-require 'external/test_support'
+require 'test_support'
 SwiftcoreTestSupport.set_src_dir
 require 'swiftcore/Analogger/Client'
 
-class TC_Analogger < Minitest::Test
+class TestAnalogger < Minitest::Test
   # TODO: This testing framework is ancient. Better testing should be written.
   # The tests are all basically functional tests, for better or for worse.
   #
@@ -20,7 +24,6 @@ class TC_Analogger < Minitest::Test
   end
 
   def test_analogger
-    cmd = "#{@rubybin} -I../lib ../bin/analogger -c analogger.cnf -w log/analogger.pid"
     @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger.cnf -w log/analogger.pid"])
     sleep 3
     logger = nil
@@ -176,7 +179,7 @@ class TC_Analogger < Minitest::Test
   def teardown
     Process.kill "SIGTERM",@analogger_pid
     Process.wait @analogger_pid
-    #Dir['log/*'].each {|fn| File.delete(fn)}
+    Dir['log/*'].each {|fn| File.delete(fn)}
   rescue
   end
 

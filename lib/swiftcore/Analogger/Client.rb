@@ -4,7 +4,7 @@ require 'socket'
 include Socket::Constants
 
 module Swiftcore
-  module Analogger
+  class Analogger
 
     # Swift::Analogger::Client is the client library for writing logging
     # messages to the Swift Analogger asynchronous logging server.
@@ -55,7 +55,7 @@ module Swiftcore
       MaxLengthBytes = MaxMessageLength.to_s.length
       Semaphore = "||"
       ConnectionFailureTimeout = 86400 * 2 # Log locally for a long time if Analogger server goes down.
-      MaxFailureCount = (2**(0.size * 8 -2) -1) # Max integer -- i.e. really big
+      MaxFailureCount = (2**(0.size * 8 - 2) - 1) # Max integer -- i.e. really big
       PersistentQueueLimit = 10737412742 # Default to allowing around 10GB temporary local log storage
       ReconnectThrottleInterval = 0.1
 
@@ -75,7 +75,7 @@ module Swiftcore
         else
           _remote_log(@service, severity, msg)
         end
-      rescue Exception => e
+      rescue Exception
         @authenticated = false
         setup_local_logging
         setup_reconnect_thread
@@ -84,7 +84,7 @@ module Swiftcore
     #----- Various class accessors -- use these to set defaults
 
       def self.connection_failure_timeout
-        @connection_failure_timeout || ConnectionFailureTimeout
+        @connection_failure_timeout ||= ConnectionFailureTimeout
       end
 
       def self.connection_failure_timeout=(val)
@@ -92,7 +92,7 @@ module Swiftcore
       end
 
       def self.max_failure_count
-        @max_failure_count || MaxFailureCount
+        @max_failure_count ||= MaxFailureCount
       end
 
       def self.max_failure_count=(val)
@@ -100,7 +100,7 @@ module Swiftcore
       end
 
       def self.persistent_queue_limit
-        @persistent_queue_limit || PersistentQueueLimit
+        @persistent_queue_limit ||= PersistentQueueLimit
       end
 
       def self.persistent_queue_limit=(val)
@@ -116,7 +116,7 @@ module Swiftcore
       end
 
       def self.reconnect_throttle_interval
-        @reconnect_throttle_interval || ReconnectThrottleInterval
+        @reconnect_throttle_interval ||= ReconnectThrottleInterval
       end
 
       def self.reconnect_throttle_interval=(val)
@@ -137,6 +137,8 @@ module Swiftcore
         @authenticated = false
         @log_throttle = Mutex.new
         @total_count = 0
+        @logfile = nil
+        @swamp_drainer = nil
 
         clear_failure
 
@@ -188,7 +190,7 @@ module Swiftcore
         # files which exist should be flushed to Analogger, even if all of
         # their creators die, or if all but one die. This is a TODO problem for
         # another day.
-        @tmplog || File.join(Dir.tmpdir,"analogger-#{@service}-#{$$}.log")
+        @tmplog ||= File.join(Dir.tmpdir,"analogger-#{@service}-#{$$}.log")
       end
 
       def tmplog=(val)
@@ -196,7 +198,7 @@ module Swiftcore
       end
 
       def reconnect_throttle_interval
-        @reconnect_throttle_interval || self.class.reconnect_throttle_interval
+        @reconnect_throttle_interval ||= self.class.reconnect_throttle_interval
       end
 
       def reconnect_throttle_interval=(val)
@@ -300,7 +302,7 @@ module Swiftcore
         begin
           _remote_log(@service, Cauthentication, "#{@key}")
           response = @socket.gets
-        rescue Exception => e
+        rescue Exception
           response = nil
         end
 
@@ -312,7 +314,7 @@ module Swiftcore
       end
 
       def there_is_a_swamp?
-        FileTest.exists?(tmplog) && File.size(tmplog) > 0
+        FileTest.exist?(tmplog) && File.size(tmplog) > 0
       end
 
       def drain_the_swamp
@@ -333,10 +335,9 @@ module Swiftcore
 
         # Guard against race conditions or other weird cases where the local
         # log file may unexpectedly have gone missing.
-        return unless File.exists? tmplog
+        return unless File.exist? tmplog
 
         File.open(tmplog) do |fh|
-          total_bytes = 0
           logfile_not_empty = true
           while logfile_not_empty
             @log_throttle.synchronize do
