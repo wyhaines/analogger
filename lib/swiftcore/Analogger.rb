@@ -1,19 +1,7 @@
 require 'socket'
 require 'swiftcore/Analogger/version'
-begin
-  load_attempted ||= false
-  require 'eventmachine'
-  require 'benchmark'
-rescue LoadError => e
-  unless load_attempted
-    load_attempted = true
-    require 'rubygems'
-    retry
-  end
-  raise e
-end
-
-
+require 'eventmachine'
+require 'benchmark'
 require 'swiftcore/Analogger/AnaloggerProtocol'
 
 module Swiftcore
