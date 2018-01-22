@@ -109,7 +109,7 @@ module Swiftcore
 
         exit if fork
 
-      rescue Exception
+      rescue NotImplementedError
         puts "Platform (#{RUBY_PLATFORM}) does not appear to support fork/setsid; skipping"
       end
 
