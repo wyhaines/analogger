@@ -318,7 +318,9 @@ module Swiftcore
       end
 
       def there_is_a_swamp?
-        FileTest.exist?(tmplog) && File.size(tmplog) > 0
+        tmplogs.each do |logfile|
+          break true if FileTest.exist?(logfile) && File.size(logfile) > 0
+        end
       end
 
       def drain_the_swamp
