@@ -246,7 +246,7 @@ module Swiftcore
         @reconnection_thread = Thread.new do
           while true
             sleep reconnect_throttle_interval
-            connect
+            connect rescue nil
             break if @socket && !closed?
           end
           @reconnection_thread = nil
