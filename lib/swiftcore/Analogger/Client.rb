@@ -188,17 +188,11 @@ module Swiftcore
       end
 
       def tmplog
-        # This naming scheme is so that multiple processes which are writing to
-        # the same service can all have their own temporary log files. This is
-        # problematic, though, because ideally any unflushed temporary log
-        # files which exist should be flushed to Analogger, even if all of
-        # their creators die, or if all but one die. This is a TODO problem for
-        # another day.
         @tmplog ||= tmplog_prefix.gsub(/SERVICE/, @service).gsub(/PID/.$$)
       end
 
       def tmplogs
-        Dir[tmplog_prefix.gsub(/SERVICE/, @service).gsub(/PID/,'*')]
+        Dir[tmplog_prefix.gsub(/SERVICE/, @service).gsub(/PID/,'*')].sort_by {|f| File.mtime(f)}
       end
 
       def tmplog=(val)
@@ -236,9 +230,11 @@ module Swiftcore
 
       def setup_local_logging
         @log_throttle.synchronize do
-          @logfile = File.open(tmplog,"a+") unless @logfile && !@logfile.closed?
-          @logfile.puts "##### START"
-          @destination = :local
+          unless @logfile && !@logfile.closed?
+            @logfile = File.open(tmplog,"a+")
+            @logfile.puts "##### START"
+            @destination = :local
+          end
         end
       end
 
