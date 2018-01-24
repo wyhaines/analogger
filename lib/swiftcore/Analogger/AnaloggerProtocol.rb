@@ -43,7 +43,11 @@ module Swiftcore
           end
         end
 
-        if @length and @logchunk.length - @pos >= @length
+        if @length < 8
+          decompose = false
+        end
+
+        if @length and @length > 0 and @logchunk.length - @pos >= @length
           msg = nil
           msg = @logchunk[@pos..@length + @pos - 1].split(Rcolon, 4)
           @pos += @length
