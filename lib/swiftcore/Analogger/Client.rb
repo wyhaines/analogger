@@ -188,7 +188,7 @@ module Swiftcore
       end
 
       def tmplog
-        @tmplog ||= tmplog_prefix.gsub(/SERVICE/, @service).gsub(/PID/.$$)
+        @tmplog ||= tmplog_prefix.gsub(/SERVICE/, @service).gsub(/PID/,$$)
       end
 
       def tmplogs
