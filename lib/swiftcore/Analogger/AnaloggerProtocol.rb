@@ -43,7 +43,7 @@ module Swiftcore
           end
         end
 
-        if @length < 8
+        if @length && @length < 8
           decompose = false
         end
 

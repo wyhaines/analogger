@@ -183,6 +183,10 @@ module Swiftcore
         @persistent_queue_limit = val.to_i
       end
 
+      def tmplog_prefix
+        File.join(Dir.tmpdir, "analogger-SERVICE-PID.log")
+      end
+
       def tmplog
         # This naming scheme is so that multiple processes which are writing to
         # the same service can all have their own temporary log files. This is
@@ -190,7 +194,11 @@ module Swiftcore
         # files which exist should be flushed to Analogger, even if all of
         # their creators die, or if all but one die. This is a TODO problem for
         # another day.
-        @tmplog ||= File.join(Dir.tmpdir,"analogger-#{@service}-#{$$}.log")
+        @tmplog ||= tmplog_prefix.gsub(/SERVICE/, @service).gsub(/PID/.$$)
+      end
+
+      def tmplogs
+        Dir[tmplog_prefix.gsub(/SERVICE/, @service).gsub(/PID/,'*')]
       end
 
       def tmplog=(val)
@@ -324,7 +332,6 @@ module Swiftcore
       end
 
       def _drain_the_swamp
-        buffer = ''
         # As soon as we start emptying the local log file, ensure that no data
         # gets missed because of IO buffering. Otherwise, during high rates of
         # message sending, it is possible to get an EOF on file reading, and
@@ -337,42 +344,50 @@ module Swiftcore
         # log file may unexpectedly have gone missing.
         return unless File.exist? tmplog
 
-        File.open(tmplog) do |fh|
-          logfile_not_empty = true
-          while logfile_not_empty
-            @log_throttle.synchronize do
-              begin
-                buffer << fh.read_nonblock(8192) unless closed?
-              rescue EOFError
-                File.unlink(tmplog)
-                setup_remote_logging
-                logfile_not_empty = false
+        tmplogs.each do |logfile|
+          buffer = ''
+
+          File.open(logfile) do |fh|
+            logfile_not_empty = true
+            while logfile_not_empty
+              @log_throttle.synchronize do
+                begin
+                  buffer << fh.read_nonblock(8192) unless closed?
+                rescue EOFError
+                  File.unlink(tmplog)
+                  setup_remote_logging
+                  logfile_not_empty = false
+                end
               end
-            end
-            records = buffer.scan(/^.*?\n/)
-            buffer = buffer[(records.inject(0){|n,e| n += e.length})..-1] # truncate buffer
-            records.each_index do |n|
-              record = records[n]
-              next if record =~ /^\#/
-              service, severity, msg = record.split(":",3)
-              msg = msg.chomp.gsub(/\x00\x00/,"\n")
-              begin
-                _remote_log(service, severity, msg)
-              rescue
-                # FAIL while draining the swamp. Just reset the buffer from wherever we are, and
-                # keep trying, after a short sleep to allow for recovery.
-                new_buffer = ''
-                records[n..-1].each {|r| new_buffer << r}
-                new_buffer << buffer
-                buffer = new_buffer
-                sleep 1
+              records = buffer.scan(/^.*?\n/)
+              buffer = buffer[(records.inject(0){|n,e| n += e.length})..-1] # truncate buffer
+              records.each_index do |n|
+                record = records[n]
+                next if record =~ /^\#/
+                service, severity, msg = record.split(":",3)
+                msg = msg.chomp.gsub(/\x00\x00/,"\n")
+                begin
+                  _remote_log(service, severity, msg)
+                rescue
+                  # FAIL while draining the swamp. Just reset the buffer from wherever we are, and
+                  # keep trying, after a short sleep to allow for recovery.
+                  new_buffer = ''
+                  records[n..-1].each {|r| new_buffer << r}
+                  new_buffer << buffer
+                  buffer = new_buffer
+                  sleep 1
+                end
               end
             end
           end
+          if tmplog != logfile
+            File.unlink logfile
+          end
         end
+
         @swamp_drainer = nil
       rescue Exception => e
-          puts "OH FUCK: #{e}\n#{e.backtrace.inspect}"
+          puts "ERROR SENDING LOCALLY SAVED LOGS: #{e}\n#{e.backtrace.inspect}"
       end
 
       public
