@@ -61,17 +61,7 @@ module Swiftcore
 
       def log(severity, msg)
         if @destination == :local
-          # Log locally. The reason can be authentication failure or connection failure.
-          # The end result is the same. We can't send logs to the server, so we write them
-          # locally. The default behavior is to push them into a local queue.
-          # If a connection is established, but the local log still has content, a thread
-          # will be started to drain the local log as quickly as possible. When it is
-          # fully drained, the client will switch to logging remotely directly.
-          # For this reason, logging to a local log is synchronized by a mutex so that the
-          # log writing to the local file can be paused when necessary.
-          @log_throttle.synchronize do
-            _local_log(@service, severity, msg)
-          end
+          _local_log(@service, severity, msg)
         else
           _remote_log(@service, severity, msg)
         end
@@ -135,7 +125,6 @@ module Swiftcore
         @max_failure_count = klass.max_failure_count
         @persistent_queue_limit = klass.persistent_queue_limit
         @authenticated = false
-        @log_throttle = Mutex.new
         @total_count = 0
         @logfile = nil
         @swamp_drainer = nil
@@ -214,14 +203,17 @@ module Swiftcore
         authenticate
         raise FailedToAuthenticate(@host, @port) unless authenticated?
         clear_failure
+
         if there_is_a_swamp?
           drain_the_swamp
         else
           setup_remote_logging
         end
+
       rescue Exception => e
         register_failure
         close_connection
+        setup_reconnect_thread unless @reconnection_thread && Thread.current == @reconnection_thread
         setup_local_logging
         raise e if fail_connect?
       end
@@ -229,12 +221,9 @@ module Swiftcore
       private
 
       def setup_local_logging
-        @log_throttle.synchronize do
-          unless @logfile && !@logfile.closed?
-            @logfile = File.open(tmplog,"a+")
-            @logfile.puts "##### START"
-            @destination = :local
-          end
+        unless @logfile && !@logfile.closed?
+          @logfile = File.open(tmplog,"a+")
+          @destination = :local
         end
       end
 
@@ -243,6 +232,7 @@ module Swiftcore
       end
 
       def setup_reconnect_thread
+        return if @reconnection_thread
         @reconnection_thread = Thread.new do
           while true
             sleep reconnect_throttle_interval
@@ -262,7 +252,10 @@ module Swiftcore
 
       def _local_log(service, severity, message)
         # Convert newlines to a different marker so that log messages can be stuffed onto a single file line.
+        @logfile.flock File::LOCK_EX
         @logfile.puts "#{service}:#{severity}:#{message.gsub(/\n/,"\x00\x00")}"
+      ensure
+        @logfile.flock File::LOCK_UN
       end
 
       def open_connection(host, port)
@@ -329,63 +322,65 @@ module Swiftcore
         end
       end
 
+      def non_blocking_lock_on_file_handle(fh, &block)
+        fh.flock(File::LOCK_EX|File::LOCK_NB) ? yield : false
+      ensure
+        fh.flock File::LOCK_UN
+      end
+
       def _drain_the_swamp
         # As soon as we start emptying the local log file, ensure that no data
         # gets missed because of IO buffering. Otherwise, during high rates of
         # message sending, it is possible to get an EOF on file reading, and
         # assume all data has been sent, when there are actually records which
         # are buffered and just haven't been written yet.
-        @logfile && ( @logfile.sync = true )
-        @logfile && @logfile.fdatasync rescue @logfile.fsync
-
-        # Guard against race conditions or other weird cases where the local
-        # log file may unexpectedly have gone missing.
-        return unless File.exist? tmplog
+        @logfile && (@logfile.sync = true)
 
         tmplogs.each do |logfile|
           buffer = ''
 
-          File.open(logfile) do |fh|
-            logfile_not_empty = true
-            while logfile_not_empty
-              @log_throttle.synchronize do
+          FileTest.exist?(logfile) && File.open(logfile) do |fh|
+            non_blocking_lock_on_file_handle(fh) do # Only one process should read a given file.
+              fh.fdatasync rescue fh.fsync
+              logfile_not_empty = true
+              while logfile_not_empty
                 begin
                   buffer << fh.read_nonblock(8192) unless closed?
                 rescue EOFError
-                  File.unlink(tmplog)
-                  setup_remote_logging
                   logfile_not_empty = false
                 end
-              end
-              records = buffer.scan(/^.*?\n/)
-              buffer = buffer[(records.inject(0){|n,e| n += e.length})..-1] # truncate buffer
-              records.each_index do |n|
-                record = records[n]
-                next if record =~ /^\#/
-                service, severity, msg = record.split(":",3)
-                msg = msg.chomp.gsub(/\x00\x00/,"\n")
-                begin
-                  _remote_log(service, severity, msg)
-                rescue
-                  # FAIL while draining the swamp. Just reset the buffer from wherever we are, and
-                  # keep trying, after a short sleep to allow for recovery.
-                  new_buffer = ''
-                  records[n..-1].each {|r| new_buffer << r}
-                  new_buffer << buffer
-                  buffer = new_buffer
-                  sleep 1
+                records = buffer.scan(/^.*?\n/)
+                buffer = buffer[(records.inject(0) {|n, e| n += e.length})..-1] # truncate buffer
+                records.each_index do |n|
+                  record = records[n]
+                  next if record =~ /^\#/
+                  service, severity, msg = record.split(":", 3)
+                  msg = msg.chomp.gsub(/\x00\x00/, "\n")
+                  begin
+                    _remote_log(service, severity, msg)
+                  rescue
+                    # FAIL while draining the swamp. Just reset the buffer from wherever we are, and
+                    # keep trying, after a short sleep to allow for recovery.
+                    new_buffer = ''
+                    records[n..-1].each {|r| new_buffer << r}
+                    new_buffer << buffer
+                    buffer = new_buffer
+                    sleep 1
+                  end
                 end
               end
+              File.unlink logfile
             end
-          end
-          if tmplog != logfile
-            File.unlink logfile
+            if tmplog == logfile
+              setup_remote_logging
+            end
           end
         end
 
+
         @swamp_drainer = nil
       rescue Exception => e
-          puts "ERROR SENDING LOCALLY SAVED LOGS: #{e}\n#{e.backtrace.inspect}"
+        STDERR.puts "ERROR SENDING LOCALLY SAVED LOGS: #{e}\n#{e.backtrace.inspect}"
       end
 
       public
