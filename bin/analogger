@@ -1,4 +1,4 @@
-#!ruby
+#!/usr/bin/env ruby
 
 require 'yaml'
 require 'optparse'
@@ -95,6 +95,4 @@ module Swiftcore
   end
 end
 
-loop do
-  catch(:hup) {Swiftcore::AnaloggerExec.run}
-end
+Swiftcore::AnaloggerExec.run

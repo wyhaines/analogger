@@ -120,10 +120,13 @@ module Swiftcore
         @key = key
         @host = host
         @port = port
+        @socket = nil
         klass = self.class
         @connection_failure_timeout = klass.connection_failure_timeout
         @max_failure_count = klass.max_failure_count
         @persistent_queue_limit = klass.persistent_queue_limit
+        @destination = nil
+        @reconnection_thread = nil
         @authenticated = false
         @total_count = 0
         @logfile = nil

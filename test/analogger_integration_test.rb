@@ -21,10 +21,196 @@ class TestAnalogger < Minitest::Test
 
     @rubybin = File.join(::RbConfig::CONFIG['bindir'],::RbConfig::CONFIG['ruby_install_name'])
     @rubybin << ::RbConfig::CONFIG['EXEEXT']
+    ENV['PATH'] = "#{::RbConfig::CONFIG['bindir']}:#{File.expand_path(File.join(@@testdir,'..','bin'))}:#{ENV['PATH']}"
+    ENV['RUBYLIB'] = "../lib"
+  end
+
+  def test_hup
+    puts "\n\nTesting HUP\n\n"
+    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["../bin/analogger -c analogger.cnf -w log/analogger.pid"])
+
+    sleep 3
+    logger = nil
+
+    pid = File.read('log/analogger.pid').chomp
+
+    assert_equal(@analogger_pid.to_s,pid)
+
+    puts "Delivering test messages."
+
+    levels = ['debug','info','warn']
+
+    logger = Swiftcore::Analogger::Client.new('idontmatch','127.0.0.1','47990')
+
+    levels.each do |level|
+      logger.log(level,'abc123')
+    end
+
+    levels = ['a','b','c']
+
+    logger = Swiftcore::Analogger::Client.new('a','127.0.0.1','47990')
+
+    levels.each do |level|
+      logger.log(level,'abc123')
+    end
+
+    logger = Swiftcore::Analogger::Client.new('b','127.0.0.1','47990')
+
+    levels.each do |level|
+      logger.log(level,'abc123')
+    end
+
+    Process.kill 'SIGHUP', @analogger_pid
+    sleep(1)
+
+    pid = File.read('log/analogger.pid').chomp
+    assert_equal(@analogger_pid.to_s,pid) # PID should not have changed.
+
+    levels = ['info','warn','fatal']
+
+    logger = Swiftcore::Analogger::Client.new('c','127.0.0.1','47990')
+
+    levels.each do |level|
+      logger.log(level,'abc123')
+    end
+
+    levels = ['info','junk']
+
+    logger = Swiftcore::Analogger::Client.new('d','127.0.0.1','47990')
+
+    levels.each do |level|
+      logger.log(level,'abc123')
+    end
+
+    logger = Swiftcore::Analogger::Client.new('stderr','127.0.0.1','47990')
+
+    5.times {|x| logger.log('info',"Logging to STDERR ##{x}") }
+
+    puts "Waiting for log sync.\n\n"
+    sleep 2
+
+    puts "\nChecking results.\n\n"
+    logfile = ''
+    logfile = File.read('log/default.log')
+    assert(logfile =~ /idontmatch|debug|abc123/,"Default log doesn't appear to have the expected message: idontmatch|debug|abc123")
+    assert(logfile =~ /idontmatch|debug|Last message repeated 2 times/,"Default log doesn't appear to have the expected message: idontmatch|debug|Last message repeated 2 times")
+
+    logfile = ''
+    logfile = File.read('log/a.log')
+    assert(logfile =~ /a|a|abc123/,"Log doesn't appear to have the expected message: a|a|abc123")
+    assert(logfile =~ /a|b|abc123/,"Log doesn't appear to have the expected message: a|b|abc123")
+    assert(logfile =~ /a|c|abc123/,"Log doesn't appear to have the expected message: a|c|abc123")
+    assert(logfile =~ /b|a|abc123/,"Log doesn't appear to have the expected message: b|a|abc123")
+    assert(logfile =~ /b|b|abc123/,"Log doesn't appear to have the expected message: b|b|abc123")
+    assert(logfile =~ /b|c|abc123/,"Log doesn't appear to have the expected message: b|c|abc123")
+
+    logfile = ''
+    logfile = File.read('log/c.log')
+    assert(logfile =~ /c|info|abc123/,"Log doesn't appear to have the expected message: c|info|abc123")
+    assert(logfile =~ /c|warn|abc123/,"Log doesn't appear to have the expected message: c|warn|abc123")
+    assert(logfile =~ /c|fatal|abc123/,"Log doesn't appear to have the expected message: c|fatal|abc123")
+
+    logfile = ''
+    logfile = File.read('log/d.log')
+    assert(logfile =~ /d|info|abc123/,"Log doesn't appear to have the expected message: d|info|abc123")
+    assert(logfile !~ /junk/,"Log file has a message in it that should have been dropped.")
+    teardown
+  end
+
+  def test_usr2
+    puts "\n\nTesting USR2\n\n"
+    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["../bin/analogger -c analogger.cnf -w log/analogger.pid"])
+    sleep 3
+    logger = nil
+
+    pid = File.read('log/analogger.pid').chomp
+
+    assert_equal(@analogger_pid.to_s,pid)
+
+    puts "Delivering test messages."
+
+    levels = ['debug','info','warn']
+
+    logger = Swiftcore::Analogger::Client.new('idontmatch','127.0.0.1','47990')
+
+    levels.each do |level|
+      logger.log(level,'abc123')
+    end
+
+    levels = ['a','b','c']
+
+    logger = Swiftcore::Analogger::Client.new('a','127.0.0.1','47990')
+
+    levels.each do |level|
+      logger.log(level,'abc123')
+    end
+
+    logger = Swiftcore::Analogger::Client.new('b','127.0.0.1','47990')
+
+    levels.each do |level|
+      logger.log(level,'abc123')
+    end
+
+    Process.kill 'SIGUSR2', @analogger_pid
+    sleep(3)
+
+    pid = File.read('log/analogger.pid').chomp
+    assert_equal(@analogger_pid.to_s, pid)
+
+    levels = ['info','warn','fatal']
+
+    logger = Swiftcore::Analogger::Client.new('c','127.0.0.1','47990')
+
+    levels.each do |level|
+      logger.log(level,'abc123')
+    end
+
+    levels = ['info','junk']
+
+    logger = Swiftcore::Analogger::Client.new('d','127.0.0.1','47990')
+
+    levels.each do |level|
+      logger.log(level,'abc123')
+    end
+
+    logger = Swiftcore::Analogger::Client.new('stderr','127.0.0.1','47990')
+
+    5.times {|x| logger.log('info',"Logging to STDERR ##{x}") }
+
+    puts "Waiting for log sync.\n\n"
+    sleep 2
+
+    puts "\nChecking results.\n\n"
+    logfile = ''
+    logfile = File.read('log/default.log')
+    assert(logfile =~ /idontmatch|debug|abc123/,"Default log doesn't appear to have the expected message: idontmatch|debug|abc123")
+    assert(logfile =~ /idontmatch|debug|Last message repeated 2 times/,"Default log doesn't appear to have the expected message: idontmatch|debug|Last message repeated 2 times")
+
+    logfile = ''
+    logfile = File.read('log/a.log')
+    assert(logfile =~ /a|a|abc123/,"Log doesn't appear to have the expected message: a|a|abc123")
+    assert(logfile =~ /a|b|abc123/,"Log doesn't appear to have the expected message: a|b|abc123")
+    assert(logfile =~ /a|c|abc123/,"Log doesn't appear to have the expected message: a|c|abc123")
+    assert(logfile =~ /b|a|abc123/,"Log doesn't appear to have the expected message: b|a|abc123")
+    assert(logfile =~ /b|b|abc123/,"Log doesn't appear to have the expected message: b|b|abc123")
+    assert(logfile =~ /b|c|abc123/,"Log doesn't appear to have the expected message: b|c|abc123")
+
+    logfile = ''
+    logfile = File.read('log/c.log')
+    assert(logfile =~ /c|info|abc123/,"Log doesn't appear to have the expected message: c|info|abc123")
+    assert(logfile =~ /c|warn|abc123/,"Log doesn't appear to have the expected message: c|warn|abc123")
+    assert(logfile =~ /c|fatal|abc123/,"Log doesn't appear to have the expected message: c|fatal|abc123")
+
+    logfile = ''
+    logfile = File.read('log/d.log')
+    assert(logfile =~ /d|info|abc123/,"Log doesn't appear to have the expected message: d|info|abc123")
+    assert(logfile !~ /junk/,"Log file has a message in it that should have been dropped.")
+    teardown
   end
 
   def test_analogger
-    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger.cnf -w log/analogger.pid"])
+    puts "\n\nTesting regular operation\n\n"
+    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["../bin/analogger -c analogger.cnf -w log/analogger.pid"])
     sleep 3
     logger = nil
 
@@ -117,7 +303,8 @@ class TestAnalogger < Minitest::Test
 
   def speedtest(label,message, random_failures = 1)
     puts "Analogger Speedtest -- #{label}"
-    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger2.cnf -w log/analogger.pid"])
+    #@analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger.cnf -w log/analogger.pid"])
+    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["../bin/analogger -c analogger.cnf -w log/analogger.pid"])
     sleep 3
 
     _speedtest(message, random_failures)
@@ -151,7 +338,8 @@ class TestAnalogger < Minitest::Test
     total = Time.now - start
 
     unless @analogger_pid
-      @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger2.cnf -w log/analogger.pid"])
+    #@analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger.cnf -w log/analogger.pid"])
+      @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["../bin/analogger -c analogger.cnf -w log/analogger.pid"])
     end
     sleep 3
 
@@ -177,7 +365,9 @@ class TestAnalogger < Minitest::Test
   end
 
   def teardown
-    Process.kill "SIGTERM",@analogger_pid
+    @analogger_pid ||= nil
+    return unless @analogger_pid
+    Process.kill "SIGTERM", @analogger_pid
     Process.wait @analogger_pid
     Dir['log/*'].each {|fn| File.delete(fn)}
   rescue
