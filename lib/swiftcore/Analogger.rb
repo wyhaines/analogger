@@ -49,7 +49,6 @@ module Swiftcore
       def start(config,protocol = AnaloggerProtocol)
         @config = config
         daemonize if @config[Cdaemonize]
-        puts "WRITING PIDFILE -- #{$$}"
         File.open(@config[Cpidfile],'w+') {|fh| fh.puts $$} if @config[Cpidfile]
         @logs = Hash.new {|h,k| h[k] = new_log(k)}
         @queue = Hash.new {|h,k| h[k] = []}
