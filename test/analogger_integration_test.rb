@@ -151,8 +151,9 @@ class TestAnalogger < Minitest::Test
       logger.log(level,'abc123')
     end
 
+    sleep(1)
     Process.kill 'SIGUSR2', @analogger_pid
-    sleep(3)
+    sleep(1)
 
     pid = File.read('log/analogger.pid').chomp
     assert_equal(@analogger_pid.to_s, pid)
