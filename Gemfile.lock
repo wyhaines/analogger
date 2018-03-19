@@ -1,8 +1,8 @@
 PATH
   remote: .
   specs:
-    analogger (0.9.0)
-      eventmachine (~> 1.2)
+    analogger (0.9.1)
+      eventmachine (~> 1.2.5)
 
 GEM
   remote: https://rubygems.org/

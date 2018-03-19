@@ -6,6 +6,8 @@ require 'swiftcore/Analogger/AnaloggerProtocol'
 
 module Swiftcore
   class Analogger
+    EXEC_ARGUMENTS = [File.expand_path(Process.argv0), *ARGV]
+
     C_colon = ':'.freeze
     C_bar = '|'.freeze
     Ccull = 'cull'.freeze
@@ -37,6 +39,7 @@ module Swiftcore
 
     EXIT_SIGNALS = %w[INT TERM]
     RELOAD_SIGNALS = %w[HUP]
+    RESTART_SIGNALS = %w[USR2]
 
     class << self
       def safe_trap(siglist, &operation)
@@ -57,8 +60,8 @@ module Swiftcore
         @wcount = 0
         @server = nil
         safe_trap(EXIT_SIGNALS) {handle_pending_and_exit}
-        safe_trap(RELOAD_SIGNALS) {cleanup;throw :hup}
-
+        safe_trap(RELOAD_SIGNALS) {cleanup_and_reopen}
+        safe_trap(RESTART_SIGNALS) {exec(*EXEC_ARGUMENTS)}
 
         #####
         # This is gross.  EM needs to change so that it defaults to the faster
@@ -126,6 +129,14 @@ module Swiftcore
         @logs.each do |service,l|
           l.logfile.fsync if !l.logfile.closed? and l.logfile.fileno > 2
           l.logfile.close unless l.logfile.closed? or l.logfile.fileno < 3
+        end
+      end
+
+      def cleanup_and_reopen
+        @logs.each do |service,l|
+          l.logfile.fsync if !l.logfile.closed? and l.logfile.fileno > 2
+          #l.logfile.close unless l.logfile.closed? or l.logfile.fileno < 3
+          l.logfile.reopen(l.logfile.path, 'ab+') if l.logfile.fileno > 2
         end
       end
 
@@ -262,6 +273,7 @@ module Swiftcore
 
       def flush_queue
         @logs.each_value do |l|
+          #if !l.logfile.closed? and l.logfile.fileno > 2
           if l.logfile.fileno > 2
             l.logfile.fdatasync rescue l.logfile.fsync
           end
@@ -274,20 +286,27 @@ module Swiftcore
 
     end
 
-  end
+    class Log
+      attr_reader :service, :levels, :logfile, :cull
 
-  class Log
-    attr_reader :service, :levels, :logfile, :cull
+      def initialize(spec)
+        @service = spec[Analogger::Cservice]
+        @levels = spec[Analogger::Clevels]
+        @logfile = spec[Analogger::Clogfile]
+        @cull = spec[Analogger::Ccull]
+      end
 
-    def initialize(spec)
-      @service = spec[Analogger::Cservice]
-      @levels = spec[Analogger::Clevels]
-      @logfile = spec[Analogger::Clogfile]
-      @cull = spec[Analogger::Ccull]
-    end
+      def to_s
+        "service: #{@service}\nlevels: #{@levels.inspect}\nlogfile: #{@logfile}\ncull: #{@cull}\n"
+      end
 
-    def to_s
-      "service: #{@service}\nlevels: #{@levels.inspect}\nlogfile: #{@logfile}\ncull: #{@cull}\n"
+      def ==(n)
+        n.service == @service &&
+          n.levels == @levels &&
+          n.logfile == @logfile &&
+          n.cull == @cull
+      end
+
     end
   end
 

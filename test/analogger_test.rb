@@ -7,180 +7,54 @@ require 'rbconfig'
 require 'logger'
 require 'test_support'
 SwiftcoreTestSupport.set_src_dir
-require 'swiftcore/Analogger/Client'
+require 'swiftcore/Analogger'
 
-class TestAnalogger < Minitest::Test
-  # TODO: This testing framework is ancient. Better testing should be written.
-  # The tests are all basically functional tests, for better or for worse.
-  #
-  @@testdir = SwiftcoreTestSupport.test_dir(__FILE__)
+class TestAnaloggerLog < Minitest::Test
 
-  def setup
-    Dir.chdir(@@testdir)
-    SwiftcoreTestSupport.announce(:analogger,"Analogger Tests")
+  def test_log_basics
+    log = Swiftcore::Analogger::Log.new({
+      Swiftcore::Analogger::Cservice => 'info',
+      Swiftcore::Analogger::Clevels =>  Swiftcore::Analogger::DefaultSeverityLevels,
+      Swiftcore::Analogger::Clogfile => '/tmp/logfile',
+      Swiftcore::Analogger::Ccull =>    true
+    })
 
-    @rubybin = File.join(::RbConfig::CONFIG['bindir'],::RbConfig::CONFIG['ruby_install_name'])
-    @rubybin << ::RbConfig::CONFIG['EXEEXT']
+    assert_equal('info', log.service)
+    assert_equal(Swiftcore::Analogger::DefaultSeverityLevels, log.levels)
+    assert_equal('/tmp/logfile', log.logfile)
+    assert_equal(true, log.cull)
   end
 
-  def test_analogger
-    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger.cnf -w log/analogger.pid"])
-    sleep 3
-    logger = nil
+  def test_log_representation
+    log = Swiftcore::Analogger::Log.new({
+      Swiftcore::Analogger::Cservice => 'info',
+      Swiftcore::Analogger::Clevels =>  Swiftcore::Analogger::DefaultSeverityLevels,
+      Swiftcore::Analogger::Clogfile => '/tmp/logfile',
+      Swiftcore::Analogger::Ccull =>    true
+    })
 
-    pid = File.read('log/analogger.pid').chomp
-
-    assert_equal(@analogger_pid.to_s,pid)
-
-    puts "Delivering test messages."
-
-    levels = ['debug','info','warn']
-
-    logger = Swiftcore::Analogger::Client.new('idontmatch','127.0.0.1','47990')
-
-    levels.each do |level|
-      logger.log(level,'abc123')
-    end
-
-    levels = ['a','b','c']
-
-    logger = Swiftcore::Analogger::Client.new('a','127.0.0.1','47990')
-
-    levels.each do |level|
-      logger.log(level,'abc123')
-    end
-
-    logger = Swiftcore::Analogger::Client.new('b','127.0.0.1','47990')
-
-    levels.each do |level|
-      logger.log(level,'abc123')
-    end
-
-    levels = ['info','warn','fatal']
-
-    logger = Swiftcore::Analogger::Client.new('c','127.0.0.1','47990')
-
-    levels.each do |level|
-      logger.log(level,'abc123')
-    end
-
-    levels = ['info','junk']
-
-    logger = Swiftcore::Analogger::Client.new('d','127.0.0.1','47990')
-
-    levels.each do |level|
-      logger.log(level,'abc123')
-    end
-
-    logger = Swiftcore::Analogger::Client.new('stderr','127.0.0.1','47990')
-
-    5.times {|x| logger.log('info',"Logging to STDERR ##{x}") }
-
-    puts "Waiting for log sync.\n\n"
-    sleep 2
-
-    puts "\nChecking results.\n\n"
-    logfile = ''
-    logfile = File.read('log/default.log')
-    assert(logfile =~ /idontmatch|debug|abc123/,"Default log doesn't appear to have the expected message: idontmatch|debug|abc123")
-    assert(logfile =~ /idontmatch|debug|Last message repeated 2 times/,"Default log doesn't appear to have the expected message: idontmatch|debug|Last message repeated 2 times")
-
-    logfile = ''
-    logfile = File.read('log/a.log')
-    assert(logfile =~ /a|a|abc123/,"Log doesn't appear to have the expected message: a|a|abc123")
-    assert(logfile =~ /a|b|abc123/,"Log doesn't appear to have the expected message: a|b|abc123")
-    assert(logfile =~ /a|c|abc123/,"Log doesn't appear to have the expected message: a|c|abc123")
-    assert(logfile =~ /b|a|abc123/,"Log doesn't appear to have the expected message: b|a|abc123")
-    assert(logfile =~ /b|b|abc123/,"Log doesn't appear to have the expected message: b|b|abc123")
-    assert(logfile =~ /b|c|abc123/,"Log doesn't appear to have the expected message: b|c|abc123")
-
-    logfile = ''
-    logfile = File.read('log/c.log')
-    assert(logfile =~ /c|info|abc123/,"Log doesn't appear to have the expected message: c|info|abc123")
-    assert(logfile =~ /c|warn|abc123/,"Log doesn't appear to have the expected message: c|warn|abc123")
-    assert(logfile =~ /c|fatal|abc123/,"Log doesn't appear to have the expected message: c|fatal|abc123")
-
-    logfile = ''
-    logfile = File.read('log/d.log')
-    assert(logfile =~ /d|info|abc123/,"Log doesn't appear to have the expected message: d|info|abc123")
-    assert(logfile !~ /junk/,"Log file has a message in it that should have been dropped.")
-    teardown
-
-    require 'benchmark'
-
-    speedtest('short messages','0123456789')
-    speedtest('larger messages','0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789')
-    speedtest('Fail Analogger, continue logging locally, and monitor for Analogger return, then drain queue of local logs', '00000',0.9995)
-    logger_speedtest('short messages','0123456789')
-    logger_speedtest('larger messages','0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789')
+    assert_equal(
+        "service: #{log.service}\nlevels: #{log.levels.inspect}\nlogfile: #{log.logfile}\ncull: #{log.cull}\n",
+        log.to_s)
   end
 
-  def speedtest(label,message, random_failures = 1)
-    puts "Analogger Speedtest -- #{label}"
-    @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger2.cnf -w log/analogger.pid"])
-    sleep 3
+  def test_log_comparisons
+    log_a = Swiftcore::Analogger::Log.new({
+      Swiftcore::Analogger::Cservice => 'info',
+      Swiftcore::Analogger::Clevels =>  Swiftcore::Analogger::DefaultSeverityLevels,
+      Swiftcore::Analogger::Clogfile => '/tmp/logfile',
+      Swiftcore::Analogger::Ccull =>    true
+    })
 
-    _speedtest(message, random_failures)
-  end
+    log_b= Swiftcore::Analogger::Log.new({
+      Swiftcore::Analogger::Cservice => 'info',
+      Swiftcore::Analogger::Clevels =>  Swiftcore::Analogger::DefaultSeverityLevels,
+      Swiftcore::Analogger::Clogfile => '/tmp/logfile',
+      Swiftcore::Analogger::Ccull =>    false
+    })
 
-  def _speedtest(message, random_failures)
-    count = 100000
-    logger = nil
-    logger = Swiftcore::Analogger::Client.new('speed','127.0.0.1','47990')
-    lvl = 'info'
-    puts "Testing #{count} messages of #{message.length} bytes each."
-    start = total = nil
-    start = Time.now
-    if random_failures < 1
-      count.times do |cnt|
-        # At some random point, kill the Analogger process.
-        if @analogger_pid && ( rand() > random_failures )
-          Process.kill "SIGTERM", @analogger_pid
-          Process.wait @analogger_pid
-          @analogger_pid = nil
-        end
-
-        # The logger client will detect that Analogger is down, and start logging locally.
-        logger.log(lvl, message)
-
-        message.next! # Increment messages
-      end
-    else
-      count.times {logger.log(lvl,message)}
-    end
-    total = Time.now - start
-
-    unless @analogger_pid
-      @analogger_pid = SwiftcoreTestSupport::create_process(:dir => '.',:cmd => ["#{@rubybin} -I../lib ../bin/analogger -c analogger2.cnf -w log/analogger.pid"])
-    end
-    sleep 3
-
-    rate = count / total
-    puts "\nMessage rate: #{rate}/second (#{total})\n\n"
-    sleep 5
-    teardown
-  end
-
-  def logger_speedtest(label,message)
-    count = 100000
-    puts "Ruby Logger Speedtest (local file logging only) -- #{label}"
-    puts "Testing 100000 messages of #{message.length} bytes each."
-    logger = Logger.new('log/ra')
-    start = total = nil
-    Benchmark.bm do |bm|
-      bm.report { start = Time.now; count.times { logger.info(message) }; total = Time.now - start}
-    end
-    rate = count / total
-    puts "\nMessage rate: #{rate}/second (#{total})\n\n"
-    logger.close
-    File.delete('log/ra')
-  end
-
-  def teardown
-    Process.kill "SIGTERM",@analogger_pid
-    Process.wait @analogger_pid
-    Dir['log/*'].each {|fn| File.delete(fn)}
-  rescue
+    assert_equal(log_a, log_a)
+    assert(log_a != log_b)
   end
 
 end
