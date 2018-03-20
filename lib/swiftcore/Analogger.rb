@@ -8,25 +8,7 @@ module Swiftcore
   class Analogger
     EXEC_ARGUMENTS = [File.expand_path(Process.argv0), *ARGV]
 
-    C_colon = ':'.freeze
-    C_bar = '|'.freeze
-    Ccull = 'cull'.freeze
-    Cdaemonize = 'daemonize'.freeze
-    Cdefault = 'default'.freeze
-    Cdefault_log = 'default_log'.freeze
-    Chost = 'host'.freeze
-    Cinterval = 'interval'.freeze
-    Ckey = 'key'.freeze
-    Clogfile = 'logfile'.freeze
-    Clogs = 'logs'.freeze
-    Cport = 'port'.freeze
-    Csecret = 'secret'.freeze
-    Cservice = 'service'.freeze
-    Clevels = 'levels'.freeze
-    Csyncinterval = 'syncinterval'.freeze
-    Cpidfile = 'pidfile'.freeze
-    DefaultSeverityLevels = ['debug','info','warn','error','fatal'].inject({}){|h,k|h[k]=true;h}
-    TimeFormat = '%Y/%m/%d %H:%M:%S'.freeze
+    DefaultSeverityLevels = [-"debug",-"info",-"warn",-"error",-"fatal"].inject({}){|h,k|h[k]=true;h}
 
     class NoPortProvided < Exception; def to_s; "The port to bind to was not provided."; end; end
     class BadPort < Exception
@@ -48,8 +30,8 @@ module Swiftcore
 
       def start(config,protocol = AnaloggerProtocol)
         @config = config
-        daemonize if @config[Cdaemonize]
-        File.open(@config[Cpidfile],'w+') {|fh| fh.puts $$} if @config[Cpidfile]
+        daemonize if @config[-"daemonize"]
+        File.open(@config[-"pidfile"],-"w+") {|fh| fh.puts $$} if @config[-"pidfile"]
         @logs = Hash.new {|h,k| h[k] = new_log(k)}
         @queue = Hash.new {|h,k| h[k] = []}
         postprocess_config_load
@@ -83,17 +65,17 @@ module Swiftcore
             flush_queue
             cleanup
           end
-          @server = EventMachine.start_server @config[Chost], @config[Cport], protocol
+          @server = EventMachine.start_server @config[-"host"], @config[-"port"], protocol
           EventMachine.add_periodic_timer(1) {Analogger.update_now}
-          EventMachine.add_periodic_timer(@config[Cinterval]) {write_queue}
-          EventMachine.add_periodic_timer(@config[Csyncinterval]) {flush_queue}
+          EventMachine.add_periodic_timer(@config[-"interval"]) {write_queue}
+          EventMachine.add_periodic_timer(@config[-"syncinterval"]) {flush_queue}
         }
         exit
       end
 
       def daemonize
         if (child_pid = fork)
-          puts "PID #{child_pid}" unless @config[Cpidfile]
+          puts "PID #{child_pid}" unless @config[-"pidfile"]
           exit!
         end
         Process.setsid
@@ -104,8 +86,8 @@ module Swiftcore
         puts "Platform (#{RUBY_PLATFORM}) does not appear to support fork/setsid; skipping"
       end
 
-      def new_log(facility = Cdefault, levels = @config[Clevels] || DefaultSeverityLevels, log = @config[Cdefault_log], cull = true)
-        Log.new({Cservice => facility, Clevels => levels, Clogfile => log, Ccull => cull})
+      def new_log(facility = -"default", levels = @config[-"levels"] || DefaultSeverityLevels, log = @config[-"default_log"], cull = true)
+        Log.new({-"service" => facility, -"levels" => levels, -"logfile" => log, -"cull" => cull})
       end
 
       # Before exiting, try to get any logs that are still in memory handled and written to disk.
@@ -135,13 +117,12 @@ module Swiftcore
       def cleanup_and_reopen
         @logs.each do |service,l|
           l.logfile.fsync if !l.logfile.closed? and l.logfile.fileno > 2
-          #l.logfile.close unless l.logfile.closed? or l.logfile.fileno < 3
-          l.logfile.reopen(l.logfile.path, 'ab+') if l.logfile.fileno > 2
+          l.logfile.reopen(l.logfile.path, -"ab+") if l.logfile.fileno > 2
         end
       end
 
       def update_now
-        @now = Time.now.strftime(TimeFormat)
+        @now = Time.now.strftime(-"%Y/%m/%d %H:%M:%S")
       end
 
       def config
@@ -153,26 +134,26 @@ module Swiftcore
       end
 
       def populate_logs
-        @config[Clogs].each do |log|
-          next unless log[Cservice]
-          if Array === log[Cservice]
-            log[Cservice].each do |loglog|
-              @logs[loglog] = new_log(loglog,log[Clevels],logfile_destination(log[Clogfile]),log[Ccull])
+        @config[-"logs"].each do |log|
+          next unless log[-"service"]
+          if Array === log[-"service"]
+            log[-"service"].each do |loglog|
+              @logs[loglog] = new_log(loglog,log[-"levels"],logfile_destination(log[-"logfile"]),log[-"cull"])
             end
           else
-            @logs[log[Cservice]] = new_log(log[Cservice],log[Clevels],logfile_destination(log[Clogfile]),log[Ccull])
+            @logs[log[-"service"]] = new_log(log[-"service"],log[-"levels"],logfile_destination(log[-"logfile"]),log[-"cull"])
           end
         end
       end
 
       def postprocess_config_load
-        @config[Clogs] ||= []
-        if @config[Clevels]
-          @config[Clevels] = normalize_levels(@config[Clevels])
+        @config[-"logs"] ||= []
+        if @config[-"levels"]
+          @config[-"levels"] = normalize_levels(@config[-"levels"])
         end
 
-        @config[Clogs].each do |log|
-          log[Clevels] = normalize_levels(log[Clevels])
+        @config[-"logs"].each do |log|
+          log[-"levels"] = normalize_levels(log[-"levels"])
         end
       end
 
@@ -191,18 +172,18 @@ module Swiftcore
       end
 
       def check_config_settings
-        raise NoPortProvided unless @config[Cport]
-        raise BadPort.new(@config[Cport]) unless @config[Cport].to_i > 0
+        raise NoPortProvided unless @config[-"port"]
+        raise BadPort.new(@config[-"port"]) unless @config[-"port"].to_i > 0
       end
 
       def set_config_defaults
-        @config[Chost] ||= '127.0.0.1'
-        @config[Cinterval] ||= 1
-        @config[Csyncinterval] ||= 60
-        @config[Csyncinterval] = nil if @config[Csyncinterval] == 0
-        @config[Cdefault_log] = @config[Cdefault_log].nil? || @config[Cdefault_log] == '-' ? 'STDOUT' : @config[Cdefault_log]
-        @config[Cdefault_log] = logfile_destination(@config[Cdefault_log])
-        @logs['default'] = new_log
+        @config[-"host"] ||= -"127.0.0.1"
+        @config[-"interval"] ||= 1
+        @config[-"syncinterval"] ||= 60
+        @config[-"syncinterval"] = nil if @config[-"syncinterval"] == 0
+        @config[-"default_log"] = @config[-"default_log"].nil? || @config[-"default_log"] == -"-" ? -"STDOUT" : @config[-"default_log"]
+        @config[-"default_log"] = logfile_destination(@config[-"default_log"])
+        @logs[-"default"] = new_log
       end
 
       def logfile_destination(logfile)
@@ -210,7 +191,7 @@ module Swiftcore
         if logfile.is_a?(IO)
           return $stdout if logfile == $stdout
           return $stderr if logfile == $stderr
-          return logfile.reopen(logfile.path, 'ab+')
+          return logfile.reopen(logfile.path, -"ab+")
         end
 
         if logfile =~ /^STDOUT$/i
@@ -218,7 +199,7 @@ module Swiftcore
         elsif logfile =~ /^STDERR$/i
           $stderr
         else
-          File.open(logfile,'ab+')
+          File.open(logfile, -"ab+")
         end
       end
 
@@ -254,19 +235,19 @@ module Swiftcore
                 last_count += 1
                 next
               elsif last_count > 0
-                lf.write_nonblock "#{@now}|#{last_sv.join(C_bar)}|Last message repeated #{last_count} times\n"
+                lf.write_nonblock "#{@now}|#{last_sv.join(-"|")}|Last message repeated #{last_count} times\n"
                 last_sv = last_m = nil
                 last_count = 0
               end
-              lf.write_nonblock "#{@now}|#{m.join(C_bar)}\n"
+              lf.write_nonblock "#{@now}|#{m.join(-"|")}\n"
               last_m = m.last
               last_sv = m[0..1]
             else
-              lf.write_nonblock "#{@now}|#{m.join(C_bar)}\n"
+              lf.write_nonblock "#{@now}|#{m.join(-"|")}\n"
             end
             @wcount += 1
           end
-          lf.write_nonblock "#{@now}|#{last_sv.join(C_bar)}|Last message repeated #{last_count} times\n" if cull and last_count > 0
+          lf.write_nonblock "#{@now}|#{last_sv.join(-"|")}|Last message repeated #{last_count} times\n" if cull and last_count > 0
         end
         @queue.each {|service,q| q.clear}
       end
@@ -281,7 +262,7 @@ module Swiftcore
       end
 
       def key
-        @config[Ckey].to_s
+        @config[-"key"].to_s
       end
 
     end
@@ -290,10 +271,10 @@ module Swiftcore
       attr_reader :service, :levels, :logfile, :cull
 
       def initialize(spec)
-        @service = spec[Analogger::Cservice]
-        @levels = spec[Analogger::Clevels]
-        @logfile = spec[Analogger::Clogfile]
-        @cull = spec[Analogger::Ccull]
+        @service = spec[-"service"]
+        @levels = spec[-"levels"]
+        @logfile = spec[-"logfile"]
+        @cull = spec[-"cull"]
       end
 
       def to_s
@@ -311,7 +292,6 @@ module Swiftcore
   end
 
   class AnaloggerProtocol < EventMachine::Connection
-    Ci = 'i'.freeze
     Rcolon = /:/
 
     LoggerClass = Analogger
