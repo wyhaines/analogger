@@ -13,10 +13,10 @@ class TestAnaloggerLog < Minitest::Test
 
   def test_log_basics
     log = Swiftcore::Analogger::Log.new({
-      Swiftcore::Analogger::Cservice => 'info',
-      Swiftcore::Analogger::Clevels =>  Swiftcore::Analogger::DefaultSeverityLevels,
-      Swiftcore::Analogger::Clogfile => '/tmp/logfile',
-      Swiftcore::Analogger::Ccull =>    true
+      -"service" => 'info',
+      -"levels" =>  Swiftcore::Analogger::DefaultSeverityLevels,
+      -"logfile" => '/tmp/logfile',
+      -"cull" =>    true
     })
 
     assert_equal('info', log.service)
@@ -27,10 +27,10 @@ class TestAnaloggerLog < Minitest::Test
 
   def test_log_representation
     log = Swiftcore::Analogger::Log.new({
-      Swiftcore::Analogger::Cservice => 'info',
-      Swiftcore::Analogger::Clevels =>  Swiftcore::Analogger::DefaultSeverityLevels,
-      Swiftcore::Analogger::Clogfile => '/tmp/logfile',
-      Swiftcore::Analogger::Ccull =>    true
+      -"service" => 'info',
+      -"levels" =>  Swiftcore::Analogger::DefaultSeverityLevels,
+      -"logfile" => '/tmp/logfile',
+      -"cull" =>    true
     })
 
     assert_equal(
@@ -40,17 +40,17 @@ class TestAnaloggerLog < Minitest::Test
 
   def test_log_comparisons
     log_a = Swiftcore::Analogger::Log.new({
-      Swiftcore::Analogger::Cservice => 'info',
-      Swiftcore::Analogger::Clevels =>  Swiftcore::Analogger::DefaultSeverityLevels,
-      Swiftcore::Analogger::Clogfile => '/tmp/logfile',
-      Swiftcore::Analogger::Ccull =>    true
+      -"service" => 'info',
+      -"levels" =>  Swiftcore::Analogger::DefaultSeverityLevels,
+      -"logfile" => '/tmp/logfile',
+      -"cull" =>    true
     })
 
     log_b= Swiftcore::Analogger::Log.new({
-      Swiftcore::Analogger::Cservice => 'info',
-      Swiftcore::Analogger::Clevels =>  Swiftcore::Analogger::DefaultSeverityLevels,
-      Swiftcore::Analogger::Clogfile => '/tmp/logfile',
-      Swiftcore::Analogger::Ccull =>    false
+      -"service" => 'info',
+      -"levels" =>  Swiftcore::Analogger::DefaultSeverityLevels,
+      -"logfile" => '/tmp/logfile',
+      -"cull" =>    false
     })
 
     assert_equal(log_a, log_a)

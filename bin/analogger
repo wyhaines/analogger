@@ -47,39 +47,39 @@ module Swiftcore
       #   cull: true
       #
       OptionParser.new do |opts|
-        opts.banner = "Analogger v#{Swiftcore::Analogger::VERSION}\nUsage: analogger.rb [options]"
-        opts.separator ''
-        opts.on('-c', '--config CONFFILE', "The configuration file to read.") do |conf|
+        opts.banner = -"Analogger v#{Swiftcore::Analogger::VERSION}\nUsage: analogger.rb [options]"
+        opts.separator -""
+        opts.on(-"-c", -"--config CONFFILE", "The configuration file to read.") do |conf|
           config = YAML.load(File.read(conf))
         end
-        opts.on('-p', '--port [PORT]', Integer, "The port to receive connections on.") do |port|
-          config[Swiftcore::Analogger::Cport] = port
+        opts.on(-"-p", -"--port [PORT]", Integer, "The port to receive connections on.") do |port|
+          config[-"port"] = port
         end
-        opts.on('-h', '--host [HOST]', String, "The host to bind the connection to.") do |host|
-          config[Swiftcore::Analogger::Chost] = host
+        opts.on(-"-h", -"--host [HOST]", String, "The host to bind the connection to.") do |host|
+          config[-"host"] = host
         end
-#				opts.on('-r','--controlkey [KEY]',String,"The secret key that authenticates a control session.") do |secret|
-#					config[Swiftcore::Analogger::Csecret] = secret
-#				end
-        opts.on('-k', '--key [KEY]', String, "The secret key that authenticates a valid client session.") do |secret|
-          config[Swiftcore::Analogger::Ckey] = secret
+	opts.on(-"-r",-"--controlkey [KEY]",String,-"The secret key that authenticates a control session.") do |secret|
+          config[-"secret"] = secret
+	end
+        opts.on(-"-k", -"--key [KEY]", String, -"The secret key that authenticates a valid client session.") do |secret|
+          config[-"key"] = secret
         end
-        opts.on('-i', '--interval [INTERVAL]', Integer, "The interval between queue writes.  Defaults to 1 second.") do |interval|
-          config[Swiftcore::Analogger::Cinterval] = interval
+        opts.on(-"-i", -"--interval [INTERVAL]", Integer, -"The interval between queue writes.  Defaults to 1 second.") do |interval|
+          config[-"interval"] = interval
         end
-        opts.on('-s', '--syncinterval [INTERVAL]', Integer, "The interval between queue syncs.  Defaults to 60 seconds.") do |interval|
-          config[Swiftcore::Analogger::Csyncinterval] = interval
+        opts.on(-"-s", -"--syncinterval [INTERVAL]", Integer, -"The interval between queue syncs.  Defaults to 60 seconds.") do |interval|
+          config[-"syncinterval"] = interval
         end
-        opts.on('-d', '--default [PATH]', String, "The default log destination.  Defaults to stdout.") do |default|
-          config[Swiftcore::Analogger::Cdefault_log] = default
+        opts.on(-"-d", -"--default [PATH]", String, -"The default log destination.  Defaults to stdout.") do |default|
+          config[-"default_log"] = default
         end
-        opts.on('-x', '--daemonize', "Tell the Analogger to daemonize itself.") do
-          config[Swiftcore::Analogger::Cdaemonize] = true
+        opts.on(-"-x", -"--daemonize", -"Tell the Analogger to daemonize itself.") do
+          config[-"daemonize"] = true
         end
-        opts.on('-w', '--writepid [FILENAME]', "The filename to write a PID file to.") do |pidfile|
-          config[Swiftcore::Analogger::Cpidfile] = pidfile || 'analogger.pid'
+        opts.on(-"-w", -"--writepid [FILENAME]", -"The filename to write a PID file to.") do |pidfile|
+          config[-"pidfile"] = pidfile || 'analogger.pid'
         end
-        opts.on('-v', '--version', "Show the current version of Analogger.") do
+        opts.on(-"-v", -"--version", -"Show the current version of Analogger.") do
           puts "Analogger v#{Swiftcore::Analogger::VERSION}"
           exit
         end

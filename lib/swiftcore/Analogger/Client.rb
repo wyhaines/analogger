@@ -43,17 +43,13 @@ module Swiftcore
     class Client
 
       class FailedToAuthenticate < StandardError
-        def initialize(hots = "UNK", port = 6766)
+        def initialize(hots = -"UNK", port = 6766)
           super("Failed to authenticate to the Analogger server at #{destination}:#{port}")
         end
       end
 
-      Cauthentication = 'authentication'.freeze
-      Ci = 'i'.freeze
-
       MaxMessageLength = 8192
       MaxLengthBytes = MaxMessageLength.to_s.length
-      Semaphore = "||"
       ConnectionFailureTimeout = 86400 * 2 # Log locally for a long time if Analogger server goes down.
       MaxFailureCount = (2**(0.size * 8 - 2) - 1) # Max integer -- i.e. really big
       PersistentQueueLimit = 10737412742 # Default to allowing around 10GB temporary local log storage
@@ -115,7 +111,7 @@ module Swiftcore
 
     #-----
 
-      def initialize(service = 'default', host = '127.0.0.1' , port = 6766, key = nil)
+      def initialize(service = -"default", host = -"127.0.0.1" , port = 6766, key = nil)
         @service = service.to_s
         @key = key
         @host = host
@@ -176,7 +172,7 @@ module Swiftcore
       end
 
       def tmplog_prefix
-        File.join(Dir.tmpdir, "analogger-SERVICE-PID.log")
+        File.join(Dir.tmpdir, -"analogger-SERVICE-PID.log")
       end
 
       def tmplog
@@ -184,7 +180,7 @@ module Swiftcore
       end
 
       def tmplogs
-        Dir[tmplog_prefix.gsub(/SERVICE/, @service).gsub(/PID/,'*')].sort_by {|f| File.mtime(f)}
+        Dir[tmplog_prefix.gsub(/SERVICE/, @service).gsub(/PID/,-"*")].sort_by {|f| File.mtime(f)}
       end
 
       def tmplog=(val)
@@ -225,7 +221,7 @@ module Swiftcore
 
       def setup_local_logging
         unless @logfile && !@logfile.closed?
-          @logfile = File.open(tmplog,"a+")
+          @logfile = File.open(tmplog,-"a+")
           @destination = :local
         end
       end
@@ -300,7 +296,7 @@ module Swiftcore
 
       def authenticate
         begin
-          _remote_log(@service, Cauthentication, "#{@key}")
+          _remote_log(@service, -"authentication", "#{@key}")
           response = @socket.gets
         rescue Exception
           response = nil
@@ -357,7 +353,7 @@ module Swiftcore
                 records.each_index do |n|
                   record = records[n]
                   next if record =~ /^\#/
-                  service, severity, msg = record.split(":", 3)
+                  service, severity, msg = record.split(-":", 3)
                   msg = msg.chomp.gsub(/\x00\x00/, "\n")
                   begin
                     _remote_log(service, severity, msg)
