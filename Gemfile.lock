@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    analogger (0.9.1)
+    analogger (0.9.2)
       eventmachine (~> 1.2.5)
 
 GEM
