@@ -6,7 +6,7 @@ require 'swiftcore/Analogger/AnaloggerProtocol'
 
 module Swiftcore
   class Analogger
-    EXEC_ARGUMENTS = [File.expand_path(Process.argv0), *ARGV]
+    EXEC_ARGUMENTS = [File.expand_path($0), *ARGV]
 
     DefaultSeverityLevels = [-"debug",-"info",-"warn",-"error",-"fatal"].inject({}){|h,k|h[k]=true;h}
 
