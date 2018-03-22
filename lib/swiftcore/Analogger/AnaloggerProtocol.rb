@@ -31,11 +31,11 @@ module Swiftcore
               peer = peer ? ::Socket.unpack_sockaddr_in(peer)[1] : 'UNK'
               if l == ck
                 LoggerClass.add_log([:default, :error, "Max Length Exceeded from #{peer} -- #{l}/#{MaxMessageLength}"])
-                send_data -"error: max length exceeded\n"
+                send_data(-"error: max length exceeded\n")
                 close_connection_after_writing
               else
                 LoggerClass.add_log([:default, :error, "checksum failed from #{peer} -- #{l}/#{ck}"])
-                send_data -"error: checksum failed\n"
+                send_data(-"error: checksum failed\n")
                 close_connection_after_writing
               end
             end
@@ -53,9 +53,9 @@ module Swiftcore
           unless @authenticated
             if msg.last == LoggerClass.key
               @authenticated = true
-              send_data -"accepted\n"
+              send_data(-"accepted\n")
             else
-              send_data -"denied\n"
+              send_data(-"denied\n")
               close_connection_after_writing
             end
           else
