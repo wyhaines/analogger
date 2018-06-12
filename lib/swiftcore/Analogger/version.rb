@@ -1,5 +1,5 @@
 module Swiftcore
   class Analogger
-    VERSION = -"0.9.3"
+    VERSION = -"1.1.0"
   end
 end

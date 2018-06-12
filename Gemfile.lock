@@ -1,13 +1,13 @@
 PATH
   remote: .
   specs:
-    analogger (0.9.3)
+    analogger (1.1.0)
       eventmachine (~> 1.2.5)
 
 GEM
   remote: https://rubygems.org/
   specs:
-    eventmachine (1.2.5)
+    eventmachine (1.2.7)
     minitest (5.11.1)
     rake (11.3.0)
 
@@ -21,4 +21,4 @@ DEPENDENCIES
   rake (~> 11.0)
 
 BUNDLED WITH
-   1.16.1
+   1.16.2
