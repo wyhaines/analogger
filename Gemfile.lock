@@ -9,7 +9,7 @@ GEM
   specs:
     eventmachine (1.2.7)
     minitest (5.11.1)
-    rake (11.3.0)
+    rake (13.0.1)
 
 PLATFORMS
   ruby
@@ -18,7 +18,7 @@ DEPENDENCIES
   analogger!
   bundler (~> 1.10)
   minitest (~> 5)
-  rake (~> 11.0)
+  rake (~> 13.0)
 
 BUNDLED WITH
    1.16.2
