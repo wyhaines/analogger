@@ -118,23 +118,23 @@ module Swiftcore
       #
       module LoggerInterface
         include Logger::Severity
-        MapUnknownTo = 'info'
+        MAP_UNKNOWN_TO = 'info'
 
         # A severity is the worded name for a log level
         # A level is the numerical value given to a severity
-        SeverityToLevel = {}.freeze
-        LevelToSeverity = {}.freeze
+        SEVERITY_TO_LEVEL = {}.freeze
+        SEVERITY_TI_LEVEL = {}.freeze
 
         Logger::Severity.constants.each do |const|
           # N.B. All severities mapped to lower case!
           severity = const.downcase
           level = Logger::Severity.const_get(const)
-          SeverityToLevel[severity] = level
-          LevelToSeverity[level] = severity
+          SEVERITY_TO_LEVEL[severity] = level
+          SEVERITY_TI_LEVEL[level] = severity
         end
 
-        SeverityToLevel.default = SeverityToLevel[MapUnknownTo]
-        LevelToSeverity.default = MapUnknownTo
+        SEVERITY_TO_LEVEL.default = SEVERITY_TO_LEVEL[MAP_UNKNOWN_TO]
+        SEVERITY_TI_LEVEL.default = MAP_UNKNOWN_TO
 
         def self.extend_object(log_client)
           class <<log_client
@@ -151,30 +151,29 @@ module Swiftcore
 
               case severity
               when Numeric
-                severity = LevelToSeverity[level]
+                severity = SEVERITY_TI_LEVEL[level]
               when Symbol
                 severity = severity.to_s.downcase
-                level = SeverityToLevel[severity]
+                level = SEVERITY_TO_LEVEL[severity]
               when String
                 severity = severity.to_s.downcase
-                level = SeverityToLevel[severity]
+                level = SEVERITY_TO_LEVEL[severity]
               else
                 raise ArgumentError, '#add accepts either Numeric, Symbol or String'
               end
               return true unless @level <= level
 
-              # We map severity unknown to info by default. MapUnknownTo.replace('mylevel')
+              # We map severity unknown to info by default. MAP_UNKNOWN_TO.replace('mylevel')
               # to change that.
-              severity = MapUnknownTo if severity == 'unknown'
+              severity = MAP_UNKNOWN_TO if severity == 'unknown'
 
               progname ||= @service
               if message.nil?
-                if block_given?
-                  message = yield
-                else
-                  message = progname
-                  progname = @service
-                end
+                message = if block_given?
+                            yield
+                          else
+                            progname
+                          end
               end
 
               analog(severity, message)
@@ -189,7 +188,7 @@ module Swiftcore
         end
 
         # As there is no notion of a raw message for an analogger client, this sends messages
-        # at the default log level (unknown, which is mapped to MapUnknownTo).
+        # at the default log level (unknown, which is mapped to MAP_UNKNOWN_TO).
         def <<(raw)
           add(nil, raw)
         end

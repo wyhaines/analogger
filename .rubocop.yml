@@ -37,6 +37,15 @@ Lint/RaiseException:
 Lint/StructNewOverride:
   Enabled: true
 
+Lint/DeprecatedOpenSSLConstant:
+  Enabled: true
+
+Metrics/BlockLength:
+  Max: 35
+
+Metrics/BlockNesting:
+  Max: 4
+
 Metrics/ModuleLength:
   Max: 500
 
@@ -55,6 +64,12 @@ Metrics/CyclomaticComplexity:
 Metrics/PerceivedComplexity:
   Max: 35
 
+Naming/FileName:
+  Enabled: false
+
+Style/CaseEquality:
+  Enabled: false
+ 
 Style/Documentation:
   Enabled: false
 
@@ -62,9 +77,6 @@ Style/IfUnlessModifier:
   Enabled: true
 
 Style/AndOr:
-  Enabled: false
-
-Style/WordArray:
   Enabled: false
 
 Style/ExponentialNotation:
@@ -79,6 +91,14 @@ Style/HashTransformKeys:
 Style/HashTransformValues:
   Enabled: true
 
+Style/MixinUsage:
+  Enabled: false
+
+Style/MultipleComparison:
+  Enabled: false
+
 Style/SlicingWithRange:
   Enabled: true
 
+Style/WordArray:
+  Enabled: false

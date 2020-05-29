@@ -9,11 +9,37 @@ require 'async/io/stream'
 require 'benchmark'
 require 'swiftcore/Analogger/AnaloggerProtocol'
 
+module Async
+  # Monkey Patch to add a convenience method for defining single use or periodic timers
+  class Task
+    def add_timer(interval: 0, periodic: true)
+      async do |subtask|
+        loop do
+          subtask.sleep(interval)
+          yield
+          break unless periodic
+        end
+      end
+    end
+  end
+
+  module IO
+    # Monkey Patch because a Trap should be able to report what it's trapping.
+    class Trap
+      attr_reader :name
+
+      def to_s
+        "Async::IO::Trap(#{name})"
+      end
+    end
+  end
+end
+
 module Swiftcore
   class Analogger
     EXEC_ARGUMENTS = [File.expand_path($PROGRAM_NAME), *ARGV].freeze
 
-    DefaultSeverityLevels = [
+    DEFAULT_SEVERITY_LEVELS = [
       -'debug',
       -'info',
       -'warn',
@@ -42,65 +68,102 @@ module Swiftcore
     RESTART_SIGNALS = %i[USR2].freeze
 
     class << self
-      def safe_trap(siglist, &operation)
-        (Signal.list.keys & siglist).each { |sig| trap(sig, &operation) }
+      def handle_daemonize
+        daemonize if @config[-'daemonize']
+        File.open(@config[-'pidfile'], -'w+') { |fh| fh.puts Process.pid } if @config[-'pidfile']
+      end
+
+      def initialize_start_variables(config: {})
+        @config = config
+        @logs = Hash.new { |h, k| h[k] = new_log(facility: k) }
+        @queue = Hash.new { |h, k| h[k] = [] }
+        @rcount = 0
+        @wcount = 0
+        @server = nil
+      end
+
+      def install_int_term_trap(task: nil, server: nil)
+        int_trap = Async::IO::Trap.new(:INT)
+        term_trap = Async::IO::Trap.new(:TERM)
+        [int_trap, term_trap].each do |trap|
+          trap.install!
+          task.async do |_handler_task|
+            trap.wait
+
+            write_queue if any_in_queue?
+            flush_queue
+            cleanup
+            trap.default!
+            Async.logger.info(server) do |buffer|
+              buffer.puts "Caught #{trap}"
+              buffer.puts 'Stopping all tasks...'
+              task.print_hierarchy(buffer)
+              buffer.puts '', 'Reactor Hierarchy'
+              task.reactor.print_hierarchy(buffer)
+            end
+            task.stop
+          end
+        end
+      end
+
+      def install_hup_trap(task: nil)
+        hup_trap = Async::IO::Trap.new(:HUP)
+        hup_trap.install!
+        task.async do |_handler_task|
+          loop do
+            hup_trap.wait
+            cleanup_and_reopen
+          end
+        end
+      end
+
+      def install_usr2_trap(task: nil, server: nil)
+        usr2_trap = Async::IO::Trap.new(:USR2)
+        usr2_trap.install!
+        task.async do |_handler_task|
+          loop do
+            usr2_trap.wait
+            write_queue if any_in_queue?
+            flush_queue
+            cleanup
+            Async.logger.info(server) do |buffer|
+              buffer.puts "Caught #{usr2_trap}"
+              buffer.puts 'Stopping all tasks...'
+              task.print_hierarchy(buffer)
+              buffer.puts '', 'Reactor Hierarchy'
+              task.reactor.print_hierarchy(buffer)
+              buffer.puts '', "Restarting with: #{EXEC_ARGUMENTS}"
+            end
+            exec(*EXEC_ARGUMENTS)
+          end
+        end
       end
 
       def start(config, protocol = AnaloggerProtocol)
-        @config = config
-        daemonize if @config[-'daemonize']
-        File.open(@config[-'pidfile'], -'w+') { |fh| fh.puts Process.pid } if @config[-'pidfile']
-        @logs = Hash.new { |h, k| h[k] = new_log(k) }
-        @queue = Hash.new { |h, k| h[k] = [] }
+        initialize_start_variables(config: config)
+        handle_daemonize
         postprocess_config_load
         check_config_settings
         populate_logs
         set_config_defaults
-        @rcount = 0
-        @wcount = 0
-        @server = nil
-        int_trap = Async::IO::Trap.new(:INT)
-        term_trap = Async::IO::Trap.new(:TERM)
-        hup_trap = Async::IO::Trap.new(:HUP)
-        usr2_trap = Async::IO::Trap.new(:USR2)
+
         endpoint = Async::IO::Endpoint.tcp(@config[-'host'], @config[-'port'])
+
         Async do
-          # EventMachine.add_shutdown_hook do
-          #  write_queue
-          #  flush_queue
-          #  cleanup
-          # end    Is there an equivalent with Async that runs when the reactor shuts down?
-
-          [int_trap, hup_trap, usr2_trap].each(&:install!)
-
           endpoint.bind do |server, task|
-            # Repeating Tasks
-            task.async do |subtask|
-              loop do
-                subtask.sleep 1
-                Analogger.update_now
-              end
-            end
+            install_int_term_trap(task: task, server: server)
+            install_hup_trap(task: task)
+            install_usr2_trap(task: task, server: server)
 
-            task.async do |subtask|
-              loop do
-                subtask.sleep(@config[-'interval'])
-                write_queue
-              end
-            end
-
-            task.async do |subtask|
-              loop do
-                subtask.sleep(@config[-'syncinterval'])
-                flush_queue
-              end
-            end
+            task.add_timer(interval: 1) { Analogger.update_now }
+            task.add_timer(interval: @config[-'interval']) { write_queue }
+            task.add_timer(interval: @config[-'syncinterval']) { flush_queue }
 
             server.listen(128)
 
             server.accept_each do |peer|
               stream = Async::IO::Stream.new(peer)
-              handler = protocol.new(stream, peer)
+              handler = protocol.new(stream: stream, peer: peer)
               handler.receive until stream.closed?
             end
           end
@@ -108,49 +171,29 @@ module Swiftcore
       end
 
       def daemonize
-        if (child_pid = fork)
-          puts "PID #{child_pid}" unless @config[-'pidfile']
-          exit!
-        end
-        Process.setsid
-
-        exit if fork
+        Daemons.daemonize
       rescue NotImplementedError
         puts "Platform (#{RUBY_PLATFORM}) does not appear to support fork/setsid; skipping"
       end
 
-      def new_log(facility = -'default', levels = @config[-'levels'] || DefaultSeverityLevels, log = @config[-'default_log'], cull = true)
-        Log.new({ -'service' => facility, -'levels' => levels, -'logfile' => log, -'cull' => cull })
+      def new_log(facility: -'default',
+                  levels: @config[-'levels'] || DEFAULT_SEVERITY_LEVELS,
+                  destination: @config[-'default_log'],
+                  cull: true)
+        Log.new(service: facility, levels: levels, destination: destination, cull: cull)
       end
-
-      # # Before exiting, try to get any logs that are still in memory handled and written to disk.
-      # def handle_pending_and_exit
-      #   EventMachine.stop_server(@server)
-      #   EventMachine.add_timer(1) do
-      #     _handle_pending_and_exit
-      #   end
-      # end
-      #
-      # def _handle_pending_and_exit
-      #   if any_in_queue?
-      #     write_queue
-      #     EventMachine.next_tick {_handle_pending_and_exit}
-      #   else
-      #     EventMachine.stop
-      #   end
-      # end
 
       def cleanup
         @logs.each do |_service, l|
-          l.logfile.fsync if !l.logfile.closed? and l.logfile.fileno > 2
-          l.logfile.close unless l.logfile.closed? or l.logfile.fileno < 3
+          l.destination.fsync if !l.destination.closed? and l.destination.fileno > 2
+          l.destination.close unless l.destination.closed? or l.destination.fileno < 3
         end
       end
 
       def cleanup_and_reopen
         @logs.each do |_service, l|
-          l.logfile.fsync if !l.logfile.closed? and l.logfile.fileno > 2
-          l.logfile.reopen(l.logfile.path, -'ab+') if l.logfile.fileno > 2
+          l.destination.fsync if !l.destination.closed? and l.destination.fileno > 2
+          l.destination.reopen(l.destination.path, -'ab+') if l.destination.fileno > 2
         end
       end
 
@@ -162,16 +205,23 @@ module Swiftcore
 
       attr_writer :config
 
+      # Iterate through the logs entries in the configuration file, and create a log entity for each one.
       def populate_logs
         @config[-'logs'].each do |log|
           next unless log[-'service']
 
           if Array === log[-'service']
             log[-'service'].each do |loglog|
-              @logs[loglog] = new_log(loglog, log[-'levels'], logfile_destination(log[-'logfile']), log[-'cull'])
+              @logs[loglog] = new_log(facility: loglog,
+                                      levels: log[-'levels'],
+                                      destination: logfile_destination(log[-'logfile']),
+                                      cull: log[-'cull'])
             end
           else
-            @logs[log[-'service']] = new_log(log[-'service'], log[-'levels'], logfile_destination(log[-'logfile']), log[-'cull'])
+            @logs[log[-'service']] = new_log(facility: log[-'service'],
+                                             levels: log[-'levels'],
+                                             destination: logfile_destination(log[-'logfile']),
+                                             cull: log[-'cull'])
           end
         end
       end
@@ -191,7 +241,7 @@ module Swiftcore
         elsif Array === levels
           levels.each_with_object({}) { |k, h| h[k.to_s] = true; }
         elsif levels.nil?
-          DefaultSeverityLevels
+          DEFAULT_SEVERITY_LEVELS
         elsif !(Hash === levels)
           [levels.to_s => true]
         else
@@ -201,34 +251,29 @@ module Swiftcore
 
       def check_config_settings
         raise NoPortProvided unless @config[-'port']
-        raise BadPort, @config[-'port'] unless @config[-'port'].to_i > 0
+        raise BadPort, @config[-'port'] unless @config[-'port'].to_i.positive?
       end
 
       def set_config_defaults
         @config[-'host'] ||= -'127.0.0.1'
         @config[-'interval'] ||= 1
         @config[-'syncinterval'] ||= 60
-        @config[-'syncinterval'] = nil if @config[-'syncinterval'] == 0
+        @config[-'syncinterval'] = nil if @config[-'syncinterval'].zero?
         @config[-'default_log'] = @config[-'default_log'].nil? || @config[-'default_log'] == -'-' ? -'STDOUT' : @config[-'default_log']
         @config[-'default_log'] = logfile_destination(@config[-'default_log'])
         @logs[-'default'] = new_log
       end
 
-      def logfile_destination(logfile)
-        # We're reloading if it's already an IO.
-        if logfile.is_a?(IO)
-          return $stdout if logfile == $stdout
-          return $stderr if logfile == $stderr
-
-          return logfile.reopen(logfile.path, -'ab+')
-        end
+      def logfile_destination(logfile, logtype = File, options = [-'ab+'])
+        return logfile if logfile == $stderr or logfile == $stdout
+        return logfile.reopen(logfile.path, -'ab+') if logfile.respond_to? :reopen
 
         if logfile =~ /^STDOUT$/i
           $stdout
         elsif logfile =~ /^STDERR$/i
           $stderr
         else
-          File.open(logfile, -'ab+')
+          logtype.open(logfile, *options)
         end
       end
 
@@ -239,24 +284,26 @@ module Swiftcore
 
       def any_in_queue?
         any = 0
-        @queue.each do |_service, q|
+        @queue.each do |service, q|
+          next unless (log = @logs[service])
+
+          levels = log.levels
           q.each do |m|
             next unless levels.key?(m[1])
 
             any += 1
           end
         end
-        any > 0 ? any : false
+        any.positive? ? any : false
       end
 
       def write_queue
+        initial_state = [nil, nil, 0]
         @queue.each do |service, q|
-          last_sv = nil
-          last_m = nil
-          last_count = 0
-          next unless log = @logs[service]
+          last_sv, last_m, last_count = initial_state
+          next unless (log = @logs[service])
 
-          lf = log.logfile
+          lf = log.destination
           cull = log.cull
           levels = log.levels
           q.each do |m|
@@ -268,7 +315,6 @@ module Swiftcore
                 next
               elsif last_count.positive?
                 lf.write_nonblock "#{@now}|#{last_sv.join(-'|')}|Last message repeated #{last_count} times\n"
-                last_sv = last_m = nil
                 last_count = 0
               end
               lf.write_nonblock "#{@now}|#{m.join(-'|')}\n"
@@ -279,6 +325,7 @@ module Swiftcore
             end
             @wcount += 1
           end
+
           if cull and last_count.positive?
             lf.write_nonblock "#{@now}|#{last_sv.join(-'|')}|Last message repeated #{last_count} times\n"
           end
@@ -288,13 +335,12 @@ module Swiftcore
 
       def flush_queue
         @logs.each_value do |l|
-          # if !l.logfile.closed? and l.logfile.fileno > 2
-          next unless l.logfile.fileno > 2
+          next unless l.destination.fileno > 2
 
           begin
-            l.logfile.fdatasync
+            l.destination.fdatasync
           rescue StandardError
-            l.logfile.fsync
+            l.destination.fsync
           end
         end
       end
@@ -305,30 +351,30 @@ module Swiftcore
     end
 
     class Log
-      attr_reader :service, :levels, :logfile, :cull
+      attr_reader :service, :levels, :destination, :cull
 
-      def initialize(spec)
-        @service = spec[-'service']
-        @levels = spec[-'levels']
-        @logfile = spec[-'logfile']
-        @cull = spec[-'cull']
+      def initialize(service: nil, levels: [], destination: nil, cull: true)
+        @service = service
+        @levels = levels
+        @destination = destination
+        @cull = cull
       end
 
       def to_s
-        "service: #{@service}\nlevels: #{@levels.inspect}\nlogfile: #{@logfile}\ncull: #{@cull}\n"
+        "service: #{@service}\nlevels: #{@levels.inspect}\ndestination: #{@destination}\ncull: #{@cull}\n"
       end
 
       def ==(other)
         other.service == @service &&
             other.levels == @levels &&
-            other.logfile == @logfile &&
+            other.destination == @destination &&
             other.cull == @cull
       end
     end
   end
 
   class AnaloggerProtocol < Async::IO::Protocol::Generic
-    Rcolon = /:/.freeze
+    REGEXP_COLON = /:/.freeze
 
     LoggerClass = Analogger
 

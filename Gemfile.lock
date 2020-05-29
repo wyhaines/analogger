@@ -2,7 +2,8 @@ PATH
   remote: .
   specs:
     analogger (1.1.0)
-      async-io
+      async-io (~> 1.29)
+      daemons (~> 1.3)
 
 GEM
   remote: https://rubygems.org/
@@ -14,6 +15,7 @@ GEM
     async-io (1.29.0)
       async (~> 1.14)
     console (1.8.2)
+    daemons (1.3.1)
     minitest (5.11.1)
     nio4r (2.5.2)
     rake (13.0.1)
@@ -24,9 +26,9 @@ PLATFORMS
 
 DEPENDENCIES
   analogger!
-  bundler (> 1.10)
-  minitest (> 5)
-  rake (> 12.3.3)
+  bundler (~> 2.1)
+  minitest (~> 5)
+  rake (> 13)
 
 BUNDLED WITH
    2.1.4

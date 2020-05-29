@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'tmpdir'
 require 'socket'
 
@@ -5,7 +7,6 @@ include Socket::Constants
 
 module Swiftcore
   class Analogger
-
     # Swift::Analogger::Client is the client library for writing logging
     # messages to the Swift Analogger asynchronous logging server.
     #
@@ -41,19 +42,18 @@ module Swiftcore
     # Analogger severity levels are the same as in the standard Ruby
     #
     class Client
-
       class FailedToAuthenticate < StandardError
-        def initialize(hots = -"UNK", port = 6766)
+        def initialize(_hots = -'UNK', port = 6766)
           super("Failed to authenticate to the Analogger server at #{destination}:#{port}")
         end
       end
 
-      MaxMessageLength = 8192
-      MaxLengthBytes = MaxMessageLength.to_s.length
-      ConnectionFailureTimeout = 86400 * 2 # Log locally for a long time if Analogger server goes down.
-      MaxFailureCount = (2**(0.size * 8 - 2) - 1) # Max integer -- i.e. really big
-      PersistentQueueLimit = 10737412742 # Default to allowing around 10GB temporary local log storage
-      ReconnectThrottleInterval = 0.1
+      MAX_MESSAGE_LENGTH = 8192
+      MAX_LENGTH_BYTES = MAX_MESSAGE_LENGTH.to_s.length
+      CONNECTION_FAILURE_TIMEOUT = 86_400 * 2 # Log locally for a long time if Analogger server goes down.
+      MAX_FAILURE_COUNT = (2**(0.size * 8 - 2) - 1) # Max integer -- i.e. really big
+      PERSISTENT_QUEUE_LIMIT = 10_737_412_742 # Default to allowing around 10GB temporary local log storage
+      RECONNECT_THROTTLE_INTERVAL = 0.1
 
       def log(severity, msg)
         if @destination == :local
@@ -61,16 +61,16 @@ module Swiftcore
         else
           _remote_log(@service, severity, msg)
         end
-      rescue Exception
+      rescue StandardError
         @authenticated = false
         setup_local_logging
         setup_reconnect_thread
       end
 
-    #----- Various class accessors -- use these to set defaults
+      #----- Various class accessors -- use these to set defaults
 
       def self.connection_failure_timeout
-        @connection_failure_timeout ||= ConnectionFailureTimeout
+        @connection_failure_timeout ||= CONNECTION_FAILURE_TIMEOUT
       end
 
       def self.connection_failure_timeout=(val)
@@ -78,7 +78,7 @@ module Swiftcore
       end
 
       def self.max_failure_count
-        @max_failure_count ||= MaxFailureCount
+        @max_failure_count ||= MAX_FAILURE_COUNT
       end
 
       def self.max_failure_count=(val)
@@ -86,32 +86,32 @@ module Swiftcore
       end
 
       def self.persistent_queue_limit
-        @persistent_queue_limit ||= PersistentQueueLimit
+        @persistent_queue_limit ||= PERSISTENT_QUEUE_LIMIT
       end
 
       def self.persistent_queue_limit=(val)
         @persistent_queue_limit = val.to_i
       end
 
-      def self.tmplog
-        @tmplog
+      class << self
+        attr_reader :tmplog
       end
 
-      def self.tmplog=(val)
-        @tmplog = val
+      class << self
+        attr_writer :tmplog
       end
 
       def self.reconnect_throttle_interval
-        @reconnect_throttle_interval ||= ReconnectThrottleInterval
+        @reconnect_throttle_interval ||= RECONNECT_THROTTLE_INTERVAL
       end
 
       def self.reconnect_throttle_interval=(val)
         @reconnect_throttle_interval = val.to_i
       end
 
-    #-----
+      #-----
 
-      def initialize(service = -"default", host = -"127.0.0.1" , port = 6766, key = nil)
+      def initialize(service = -'default', host = -'127.0.0.1', port = 6766, key = nil)
         @service = service.to_s
         @key = key
         @host = host
@@ -133,59 +133,47 @@ module Swiftcore
         connect
       end
 
-    #----- Various instance accessors
+      #----- Various instance accessors
 
-      def total_count
-        @total_count
-      end
+      attr_reader :total_count
 
-      def connection_failure_timeout
-        @connection_failure_timeout
-      end
+      attr_reader :connection_failure_timeout
 
       def connection_failure_timeout=(val)
         @connection_failure_timeout = val.to_i
       end
 
-      def max_failure_count
-        @max_failure_count
-      end
+      attr_reader :max_failure_count
 
       def max_failure_count=(val)
         @max_failure_count = val.to_i
       end
 
-      def ram_queue_limit
-        @ram_queue_limit
-      end
+      attr_reader :ram_queue_limit
 
       def ram_queue_limit=(val)
         @ram_queue_limit = val.to_i
       end
 
-      def persistent_queue_limit
-        @persistent_queue_limit
-      end
+      attr_reader :persistent_queue_limit
 
       def persistent_queue_limit=(val)
         @persistent_queue_limit = val.to_i
       end
 
       def tmplog_prefix
-        File.join(Dir.tmpdir, -"analogger-SERVICE-PID.log")
+        File.join(Dir.tmpdir, -'analogger-SERVICE-PID.log')
       end
 
       def tmplog
-        @tmplog ||= tmplog_prefix.gsub(/SERVICE/, @service).gsub(/PID/,$$.to_s)
+        @tmplog ||= tmplog_prefix.gsub(/SERVICE/, @service).gsub(/PID/, Process.pid.to_s)
       end
 
       def tmplogs
-        Dir[tmplog_prefix.gsub(/SERVICE/, @service).gsub(/PID/,-"*")].sort_by {|f| File.mtime(f)}
+        Dir[tmplog_prefix.gsub(/SERVICE/, @service).gsub(/PID/, -'*')].sort_by { |f| File.mtime(f) }
       end
 
-      def tmplog=(val)
-        @tmplog = val
-      end
+      attr_writer :tmplog
 
       def reconnect_throttle_interval
         @reconnect_throttle_interval ||= self.class.reconnect_throttle_interval
@@ -195,12 +183,13 @@ module Swiftcore
         @reconnect_throttle_interval = val.to_i
       end
 
-    #----- The meat of the client
+      #----- The meat of the client
 
       def connect
         @socket = open_connection(@host, @port)
         authenticate
         raise FailedToAuthenticate(@host, @port) unless authenticated?
+
         clear_failure
 
         if there_is_a_swamp?
@@ -208,8 +197,7 @@ module Swiftcore
         else
           setup_remote_logging
         end
-
-      rescue Exception => e
+      rescue StandardError => e
         register_failure
         close_connection
         setup_reconnect_thread unless @reconnection_thread && Thread.current == @reconnection_thread
@@ -220,10 +208,10 @@ module Swiftcore
       private
 
       def setup_local_logging
-        unless @logfile && !@logfile.closed?
-          @logfile = File.open(tmplog,-"a+")
-          @destination = :local
-        end
+        return if @logfile && !@logfile.closed?
+
+        @logfile = File.open(tmplog, -'a+')
+        @destination = :local
       end
 
       def setup_remote_logging
@@ -232,10 +220,15 @@ module Swiftcore
 
       def setup_reconnect_thread
         return if @reconnection_thread
+
         @reconnection_thread = Thread.new do
-          while true
+          loop do
             sleep reconnect_throttle_interval
-            connect rescue nil
+            begin
+              connect
+            rescue StandardError
+              nil
+            end
             break if @socket && !closed?
           end
           @reconnection_thread = nil
@@ -244,22 +237,22 @@ module Swiftcore
 
       def _remote_log(service, severity, message)
         @total_count += 1
-        len = MaxLengthBytes + MaxLengthBytes + service.length + severity.length + message.length + 3
-        ll = sprintf("%0#{MaxLengthBytes}i%0#{MaxLengthBytes}i", len, len)
+        len = MAX_LENGTH_BYTES + MAX_LENGTH_BYTES + service.length + severity.length + message.length + 3
+        ll = format("%0#{MAX_LENGTH_BYTES}i%0#{MAX_LENGTH_BYTES}i", len, len)
         @socket.write "#{ll}:#{service}:#{severity}:#{message}"
       end
 
       def _local_log(service, severity, message)
         # Convert newlines to a different marker so that log messages can be stuffed onto a single file line.
         @logfile.flock File::LOCK_EX
-        @logfile.puts "#{service}:#{severity}:#{message.gsub(/\n/,"\x00\x00")}"
+        @logfile.puts "#{service}:#{severity}:#{message.gsub(/\n/, "\x00\x00")}"
       ensure
         @logfile.flock File::LOCK_UN
       end
 
       def open_connection(host, port)
-        socket = Socket.new(AF_INET,SOCK_STREAM,0)
-        sockaddr = Socket.pack_sockaddr_in(port,host)
+        socket = Socket.new(AF_INET, SOCK_STREAM, 0)
+        sockaddr = Socket.pack_sockaddr_in(port, host)
         socket.connect(sockaddr)
         socket
       end
@@ -286,7 +279,7 @@ module Swiftcore
       end
 
       def failed_too_long?
-        failed? && ( @failed_at + @connection_failure_timeout ) < Time.now
+        failed? && (@failed_at + @connection_failure_timeout) < Time.now
       end
 
       def clear_failure
@@ -296,35 +289,33 @@ module Swiftcore
 
       def authenticate
         begin
-          _remote_log(@service, -"authentication", "#{@key}")
+          _remote_log(@service, -'authentication', @key.to_s)
           response = @socket.gets
-        rescue Exception
+        rescue StandardError
           response = nil
         end
 
-        if response && response =~ /accepted/
-          @authenticated = true
-        else
-          @authenticated = false
-        end
+        @authenticated = if response && response =~ /accepted/
+                           true
+                         else
+                           false
+                         end
       end
 
       def there_is_a_swamp?
         tmplogs.each do |logfile|
-          break true if FileTest.exist?(logfile) && File.size(logfile) > 0
+          break true if FileTest.exist?(logfile) && File.size(logfile).positive?
         end
       end
 
       def drain_the_swamp
-        unless @swamp_drainer
-          @swap_drainer = Thread.new { _drain_the_swamp }
-        end
+        @swap_drainer = Thread.new { _drain_the_swamp } unless @swamp_drainer
       end
 
-      def non_blocking_lock_on_file_handle(fh, &block)
-        fh.flock(File::LOCK_EX|File::LOCK_NB) ? yield : false
+      def non_blocking_lock_on_file_handle(file_handle)
+        file_handle.flock(File::LOCK_EX | File::LOCK_NB) ? yield : false
       ensure
-        fh.flock File::LOCK_UN
+        file_handle.flock File::LOCK_UN
       end
 
       def _drain_the_swamp
@@ -336,11 +327,11 @@ module Swiftcore
         @logfile && (@logfile.sync = true)
 
         tmplogs.each do |logfile|
-          buffer = ''
+          buffer = +''
 
           FileTest.exist?(logfile) && File.open(logfile) do |fh|
             non_blocking_lock_on_file_handle(fh) do # Only one process should read a given file.
-              fh.fdatasync rescue fh.fsync
+              begin; fh.fdatasync; rescue StandardError; fh.fsync; end
               logfile_not_empty = true
               while logfile_not_empty
                 begin
@@ -349,19 +340,20 @@ module Swiftcore
                   logfile_not_empty = false
                 end
                 records = buffer.scan(/^.*?\n/)
-                buffer = buffer[(records.inject(0) {|n, e| n += e.length})..-1] # truncate buffer
+                buffer = buffer[(records.inject(0) { |n, e| n + e.length })..] # truncate buffer
                 records.each_index do |n|
                   record = records[n]
                   next if record =~ /^\#/
-                  service, severity, msg = record.split(-":", 3)
+
+                  service, severity, msg = record.split(-':', 3)
                   msg = msg.chomp.gsub(/\x00\x00/, "\n")
                   begin
                     _remote_log(service, severity, msg)
-                  rescue
+                  rescue StandardError
                     # FAIL while draining the swamp. Just reset the buffer from wherever we are, and
                     # keep trying, after a short sleep to allow for recovery.
-                    new_buffer = ''
-                    records[n..-1].each {|r| new_buffer << r}
+                    new_buffer = +''
+                    records[n..].each { |r| new_buffer << r }
                     new_buffer << buffer
                     buffer = new_buffer
                     sleep 1
@@ -370,16 +362,13 @@ module Swiftcore
               end
               File.unlink logfile
             end
-            if tmplog == logfile
-              setup_remote_logging
-            end
+            setup_remote_logging if tmplog == logfile
           end
         end
 
-
         @swamp_drainer = nil
-      rescue Exception => e
-        STDERR.puts "ERROR SENDING LOCALLY SAVED LOGS: #{e}\n#{e.backtrace.inspect}"
+      rescue StandardError => e
+        warn "ERROR SENDING LOCALLY SAVED LOGS: #{e}\n#{e.backtrace.inspect}"
       end
 
       public
@@ -389,7 +378,7 @@ module Swiftcore
       end
 
       def reconnect
-        connect(@host,@port)
+        connect(@host, @port)
       end
 
       def close
@@ -399,7 +388,6 @@ module Swiftcore
       def closed?
         @socket.closed?
       end
-
     end
   end
 end

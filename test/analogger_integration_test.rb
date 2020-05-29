@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 external = File.expand_path(File.join(File.dirname(__FILE__), '..', 'external'))
-puts "EXTERNAL: #{external}"
 $LOAD_PATH.unshift(external) unless $LOAD_PATH.include?(external)
 require 'minitest/autorun'
 require 'rbconfig'
@@ -28,12 +27,8 @@ class TestAnalogger < Minitest::Test
 
   def test_hup
     puts "\n\nTesting HUP\n\n"
-    @analogger_pid = SwiftcoreTestSupport.create_process(
-      dir: '.',
-      cmd: ['../bin/analogger -c analogger.cnf -w log/analogger.pid']
-    )
+    @analogger_pid = Process.spawn('../bin/analogger -c analogger.cnf -w log/analogger.pid')
 
-    puts "GOT PID of #{@analogger_pid}"
     sleep 3
 
     pid = File.read('log/analogger.pid').chomp
@@ -125,12 +120,8 @@ class TestAnalogger < Minitest::Test
 
   def test_usr2
     puts "\n\nTesting USR2\n\n"
-    @analogger_pid = SwiftcoreTestSupport.create_process(
-      dir: '.',
-      cmd: ['../bin/analogger -c analogger.cnf -w log/analogger.pid']
-    )
+    @analogger_pid = Process.spawn('../bin/analogger -c analogger.cnf -w log/analogger.pid')
     sleep 3
-    logger = nil
 
     pid = File.read('log/analogger.pid').chomp
 
@@ -222,10 +213,7 @@ class TestAnalogger < Minitest::Test
 
   def test_analogger
     puts "\n\nTesting regular operation\n\n"
-    @analogger_pid = SwiftcoreTestSupport.create_process(
-      dir: '.',
-      cmd: ['../bin/analogger -c analogger.cnf -w log/analogger.pid']
-    )
+    @analogger_pid = Process.spawn('../bin/analogger -c analogger.cnf -w log/analogger.pid')
     sleep 3
 
     pid = File.read('log/analogger.pid').chomp
@@ -330,10 +318,7 @@ class TestAnalogger < Minitest::Test
   def speedtest(label, message, random_failures = 1)
     puts "Analogger Speedtest -- #{label}"
     message = message.dup
-    @analogger_pid = SwiftcoreTestSupport.create_process(
-      dir: '.',
-      cmd: ['../bin/analogger -c analogger.cnf -w log/analogger.pid']
-    )
+    @analogger_pid = Process.spawn('../bin/analogger -c analogger.cnf -w log/analogger.pid')
     sleep 3
 
     _speedtest(message, random_failures)
@@ -364,10 +349,7 @@ class TestAnalogger < Minitest::Test
     end
     total = Time.now - start
 
-    @analogger_pid ||= SwiftcoreTestSupport.create_process(
-      dir: '.',
-      cmd: ['../bin/analogger -c analogger.cnf -w log/analogger.pid']
-    )
+    @analogger_pid ||= Process.spawn('../bin/analogger -c analogger.cnf -w log/analogger.pid')
     sleep 3
 
     rate = count / total
@@ -399,8 +381,13 @@ class TestAnalogger < Minitest::Test
     @analogger_pid ||= nil
     return unless @analogger_pid
 
-    Process.kill 'SIGTERM', @analogger_pid
-    Process.wait @analogger_pid
+    begin
+      Process.kill 'SIGTERM', @analogger_pid
+      Process.wait @analogger_pid
+    rescue Errno::ESRCH
+      # It's already dead.
+    end
+
     Dir['log/*'].each { |fn| File.delete(fn) }
   end
 end

@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
-require 'rubygems'
 # A support module for the test suite.  This provides a win32 aware
 # mechanism for doing fork/exec operations.  It requires win32/process
 # to be installed, however.
-#
+
 module SwiftcoreTestSupport
   @run_modes = []
 
