@@ -1,19 +1,9 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require 'yaml'
 require 'optparse'
-begin
-  load_attempted ||= false
-  require 'swiftcore/Analogger'
-rescue LoadError => e
-  unless load_attempted
-    load_attempted = true
-    require 'rubygems'
-    require 'bundler/setup'
-    retry
-  end
-  raise e
-end
+require 'swiftcore/Analogger'
 
 #####
 #
@@ -23,75 +13,50 @@ end
 # provide a fast, flexible, centralized logging service for client
 # applications.
 #
-# Clients connect using and instance of the Swiftcore::Analogger::Client 
+# Clients connect using and instance of the Swiftcore::Analogger::Client
 # class, and can then deliver logging messages to the service.  The
 # Analogger is configured using a file to define mappings of service
 # labels to logging destinations, accepted severity levels, and
 # and whether to cull repeated messages or not.
 #
 #####
-
+# A bug in Rubocop is causing this to cop to fail with an exception in this code
 module Swiftcore
   class AnaloggerExec
     def self.parse_options(config = {})
-      # Config file to read
-      #
-      # port: 12345
-      # secret: abcdef
-      # interval: 1
-      # default_log: /var/log/emlogger
-      # logs:
-      # - service: client1
-      #   levels: info
-      #   logfile: /foo/bar.txt
-      #   cull: true
-      #
       OptionParser.new do |opts|
         opts.banner = -"Analogger v#{Swiftcore::Analogger::VERSION}\nUsage: analogger.rb [options]"
-        opts.separator -""
-        opts.on(-"-c", -"--config CONFFILE", "The configuration file to read.") do |conf|
-          config = YAML.load(File.read(conf))
-        end
-        opts.on(-"-p", -"--port [PORT]", Integer, "The port to receive connections on.") do |port|
-          config[-"port"] = port
-        end
-        opts.on(-"-h", -"--host [HOST]", String, "The host to bind the connection to.") do |host|
-          config[-"host"] = host
-        end
-	opts.on(-"-r",-"--controlkey [KEY]",String,-"The secret key that authenticates a control session.") do |secret|
-          config[-"secret"] = secret
-	end
-        opts.on(-"-k", -"--key [KEY]", String, -"The secret key that authenticates a valid client session.") do |secret|
-          config[-"key"] = secret
-        end
-        opts.on(-"-i", -"--interval [INTERVAL]", Integer, -"The interval between queue writes.  Defaults to 1 second.") do |interval|
-          config[-"interval"] = interval
-        end
-        opts.on(-"-s", -"--syncinterval [INTERVAL]", Integer, -"The interval between queue syncs.  Defaults to 60 seconds.") do |interval|
-          config[-"syncinterval"] = interval
-        end
-        opts.on(-"-d", -"--default [PATH]", String, -"The default log destination.  Defaults to stdout.") do |default|
-          config[-"default_log"] = default
-        end
-        opts.on(-"-x", -"--daemonize", -"Tell the Analogger to daemonize itself.") do
-          config[-"daemonize"] = true
-        end
-        opts.on(-"-w", -"--writepid [FILENAME]", -"The filename to write a PID file to.") do |pidfile|
-          config[-"pidfile"] = pidfile || 'analogger.pid'
-        end
-        opts.on(-"-v", -"--version", -"Show the current version of Analogger.") do
-          puts "Analogger v#{Swiftcore::Analogger::VERSION}"
-          exit
-        end
+        opts.separator(-'')
+        opts.on(-'-c', -'--config CONFFILE',
+                'The configuration file to read.') { |conf| config = YAML.safe_load(File.read(conf)) }
+        opts.on(-'-p', -'--port [PORT]', Integer,
+                'The port to receive connections on.') { |port| config[-'port'] = port }
+        opts.on(-'-h', -'--host [HOST]', String,
+                'The host to bind the connection to.') { |host| config[-'host'] = host }
+        opts.on(-'-r', -'--controlkey [KEY]', String,
+                -'The secret key that authenticates a control session.') { |secret| config[-'secret'] = secret }
+        opts.on(-'-k', -'--key [KEY]', String,
+                -'The secret key that authenticates a valid client session.') { |secret| config[-'key'] = secret }
+        opts.on(-'-i', -'--interval [INTERVAL]', Integer,
+                -'The interval between queue writes. Defaults to 1 second.') { |interval| config[-'interval'] = interval }
+        opts.on(-'-s', -'--syncinterval [INTERVAL]', Integer,
+                -'The interval between queue syncs. Defaults to 60 seconds.') { |interval| config[-'syncinterval'] = interval }
+        opts.on(-'-d', -'--default [PATH]', String,
+                -'The default log destination. Defaults to stdout.') { |default| config[-'default_log'] = default }
+        opts.on(-'-x', -'--daemonize',
+                -'Tell the Analogger to daemonize itself.') { config[-'daemonize'] = true }
+        opts.on(-'-w', -'--writepid [FILENAME]',
+                -'The filename to write a PID file to.') { |pidfile| config[-'pidfile'] = pidfile || 'analogger.pid' }
+        opts.on(-'-v', -'--version',
+                -'Show the current version of Analogger.') { puts "Analogger v#{Swiftcore::Analogger::VERSION}" && exit }
       end.parse!
       config
     end
 
     def self.run
-      @@parsed_options ||= parse_options
-      Swiftcore::Analogger.start(@@parsed_options)
+      @parsed_options ||= parse_options
+      Swiftcore::Analogger.start(@parsed_options)
     end
-
   end
 end
 

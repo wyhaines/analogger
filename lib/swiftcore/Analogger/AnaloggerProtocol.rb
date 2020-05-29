@@ -1,20 +1,35 @@
+require 'async/io/protocol/generic'
+
 module Swiftcore
-  class AnaloggerProtocol < EventMachine::Connection
+  class AnaloggerProtocol < Async::IO::Protocol::Generic
 
     MaxMessageLength = 8192
     MaxLengthBytes = MaxMessageLength.to_s.length
 
-    def setup
+    def initialize(stream, peer)
+      super(stream)
+
       @length = nil
       @pos = 0
       @logchunk = ''
       @authenticated = nil
+      @peer = peer
+    end
+
+    def receive
+      while chunk = @stream.readpartial(8192)
+        receive_data chunk
+      end
     end
 
     def send_data data
-      super data
+      @stream.write data
     end
 
+    # This is the key method for receiving messages and handling the protocol. The current protocol is a very
+    # simple wire protocol. A packet of data contains an 8 byte header that encodes, in ASCII, the number of
+    # characters that are in the message as a pair of 4 digit numbers. The repeated length represents a trivial
+    # checksum on the received packet.
     def receive_data data
       @logchunk << data
       decompose = true
@@ -27,8 +42,7 @@ module Swiftcore
               @length = l
             else
               decompose = false
-              peer = get_peername
-              peer = peer ? ::Socket.unpack_sockaddr_in(peer)[1] : 'UNK'
+              peer = @peer ? ::Socket.unpack_sockaddr_in(@peer)[1] : 'UNK'
               if l == ck
                 LoggerClass.add_log([:default, :error, "Max Length Exceeded from #{peer} -- #{l}/#{MaxMessageLength}"])
                 send_data(-"error: max length exceeded\n")
@@ -47,7 +61,6 @@ module Swiftcore
         end
 
         if @length and @length > 0 and @logchunk.length - @pos >= @length
-          msg = nil
           msg = @logchunk[@pos..@length + @pos - 1].split(Rcolon, 4)
           @pos += @length
           unless @authenticated

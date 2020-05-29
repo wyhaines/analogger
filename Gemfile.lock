@@ -2,14 +2,22 @@ PATH
   remote: .
   specs:
     analogger (1.1.0)
-      eventmachine (> 1.2.5)
+      async-io
 
 GEM
   remote: https://rubygems.org/
   specs:
-    eventmachine (1.2.7)
+    async (1.26.1)
+      console (~> 1.0)
+      nio4r (~> 2.3)
+      timers (~> 4.1)
+    async-io (1.29.0)
+      async (~> 1.14)
+    console (1.8.2)
     minitest (5.11.1)
+    nio4r (2.5.2)
     rake (13.0.1)
+    timers (4.3.0)
 
 PLATFORMS
   ruby

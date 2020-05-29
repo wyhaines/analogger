@@ -1,4 +1,6 @@
-# Created by James Tucker <jftucker@gmail.com> on 2008-01-07.
+# frozen_string_literal: true
+
+# Originally Created by James Tucker <jftucker@gmail.com> on 2008-01-07.
 # Code for the Logger interface taken from Logger itself now, instead of being generated.
 require 'logger'
 
@@ -18,13 +20,11 @@ require 'logger'
 module Swiftcore
   module Analogger
     class Client
-
-
       #
       # == Description
       #
       # LoggerInterface provides a module which may be used to extend an Analogger
-      # Client interface, and provide a dual-mode interface, supporting both the 
+      # Client interface, and provide a dual-mode interface, supporting both the
       # analogger client api, and the logger api.
       #
       # === Description From logger.rb:
@@ -58,7 +58,7 @@ module Swiftcore
       # A simple example demonstrates the above explanation:
       #
       #   log = Swiftcore::Analogger::Client.new('logger_interface','127.0.0.1','47990')
-      #   log.extend(Swiftcore::Analogger::Client::LoggerInterface) 
+      #   log.extend(Swiftcore::Analogger::Client::LoggerInterface)
       #   log.level = Logger::WARN
       #
       #   log.debug("Created logger")
@@ -119,11 +119,11 @@ module Swiftcore
       module LoggerInterface
         include Logger::Severity
         MapUnknownTo = 'info'
-        
+
         # A severity is the worded name for a log level
         # A level is the numerical value given to a severity
-        SeverityToLevel = Hash.new
-        LevelToSeverity = Hash.new
+        SeverityToLevel = {}.freeze
+        LevelToSeverity = {}.freeze
 
         Logger::Severity.constants.each do |const|
           # N.B. All severities mapped to lower case!
@@ -132,25 +132,23 @@ module Swiftcore
           SeverityToLevel[severity] = level
           LevelToSeverity[level] = severity
         end
-        
+
         SeverityToLevel.default = SeverityToLevel[MapUnknownTo]
         LevelToSeverity.default = MapUnknownTo
 
-
         def self.extend_object(log_client)
-
           class <<log_client
             include ::Swiftcore::Analogger::Client::LoggerInterface
-            alias analog log
-            
+            alias_method :analog, :log
+
             # The interface supports string names, symbol names and levels as the first
-            # argument. It therefrore covers both the standard analogger api, and the 
+            # argument. It therefrore covers both the standard analogger api, and the
             # logger api, and some other string based log level api.
             # N.B. This adds one main limitation - all levels are commonly downcased
             # by this interface.
-            def add(severity, message = nil, progname = nil, &block)
+            def add(severity, message = nil, progname = nil)
               level = severity
-                            
+
               case severity
               when Numeric
                 severity = LevelToSeverity[level]
@@ -161,10 +159,10 @@ module Swiftcore
                 severity = severity.to_s.downcase
                 level = SeverityToLevel[severity]
               else
-                raise ArgumentError.new('#add accepts either Numeric, Symbol or String')
+                raise ArgumentError, '#add accepts either Numeric, Symbol or String'
               end
               return true unless @level <= level
-              
+
               # We map severity unknown to info by default. MapUnknownTo.replace('mylevel')
               # to change that.
               severity = MapUnknownTo if severity == 'unknown'
@@ -179,24 +177,23 @@ module Swiftcore
                 end
               end
 
-              analog( severity, message )
+              analog(severity, message)
               true
             end
-            alias log add
-            
+            alias_method :log, :add
           end
-          
+
           # Default log level for logger is 0, maybe a good idea to fetch from logger itself.
           log_client.level ||= 0
           log_client
         end
-        
+
         # As there is no notion of a raw message for an analogger client, this sends messages
         # at the default log level (unknown, which is mapped to MapUnknownTo).
         def <<(raw)
           add(nil, raw)
         end
-        
+
         def progname=(name)
           @service = name
         end
@@ -204,7 +201,7 @@ module Swiftcore
         def progname
           @service
         end
-        
+
         #
         # The following code has been taken from logger.rb in the standard ruby distribution
         # Author:: NAKAMURA, Hiroshi  <nakahiro@sarion.co.jp>
@@ -216,29 +213,40 @@ module Swiftcore
 
         # Logging severity threshold (e.g. <tt>Logger::INFO</tt>).
         attr_accessor :level
+
         alias sev_threshold level
         alias sev_threshold= level=
 
         # Returns +true+ iff the current severity level allows for the printing of
         # +DEBUG+ messages.
-        def debug?; @level <= DEBUG; end
+        def debug?
+          @level <= DEBUG
+        end
 
         # Returns +true+ iff the current severity level allows for the printing of
         # +INFO+ messages.
-        def info?; @level <= INFO; end
+        def info?
+          @level <= INFO
+        end
 
         # Returns +true+ iff the current severity level allows for the printing of
         # +WARN+ messages.
-        def warn?; @level <= WARN; end
+        def warn?
+          @level <= WARN
+        end
 
         # Returns +true+ iff the current severity level allows for the printing of
         # +ERROR+ messages.
-        def error?; @level <= ERROR; end
+        def error?
+          @level <= ERROR
+        end
 
         # Returns +true+ iff the current severity level allows for the printing of
         # +FATAL+ messages.
-        def fatal?; @level <= FATAL; end
-        
+        def fatal?
+          @level <= FATAL
+        end
+
         #
         # Log a +DEBUG+ message.
         #
