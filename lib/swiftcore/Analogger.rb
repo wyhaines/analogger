@@ -178,22 +178,38 @@ module Swiftcore
 
       def new_log(facility: -'default',
                   levels: @config[-'levels'] || DEFAULT_SEVERITY_LEVELS,
+                  raw_destination: @config[-'default_log'],
                   destination: @config[-'default_log'],
-                  cull: true)
-        Log.new(service: facility, levels: levels, destination: destination, cull: cull)
+                  cull: true,
+                  type: -'file',
+                  options: [-'ab+'])
+        Log.new(service: facility, levels: levels, raw_destination: raw_destination, destination: destination, cull: cull, type: type, options: options)
       end
 
       def cleanup
         @logs.each do |_service, l|
-          l.destination.fsync if !l.destination.closed? and l.destination.fileno > 2
+          if !l.destination.closed? and l.destination.fileno > 2
+            begin
+              l.destination.fdatasync
+            rescue Errno::EINVAL
+              l.destination.flush
+            end
+          end
           l.destination.close unless l.destination.closed? or l.destination.fileno < 3
         end
       end
 
       def cleanup_and_reopen
         @logs.each do |_service, l|
-          l.destination.fsync if !l.destination.closed? and l.destination.fileno > 2
-          l.destination.reopen(l.destination.path, -'ab+') if l.destination.fileno > 2
+          if !l.destination.closed? and l.destination.fileno > 2
+            begin
+              l.destination.fdatasync
+            rescue Errno::EINVAL
+              l.destination.flush
+            end
+          end
+          l.destination.reopen(l.raw_destination, *l.options) if l.destination.fileno > 2
+          l.destination.reopen(l.raw_destination, *l.options) if l.destination.fileno > 2
         end
       end
 
@@ -214,14 +230,20 @@ module Swiftcore
             log[-'service'].each do |loglog|
               @logs[loglog] = new_log(facility: loglog,
                                       levels: log[-'levels'],
-                                      destination: logfile_destination(log[-'logfile']),
-                                      cull: log[-'cull'])
+                                      raw_destination: log[-'logfile'],
+                                      destination: logfile_destination(log[-'logfile'], log[-'type'], log[-'options']),
+                                      cull: log[-'cull'],
+                                      type: log[-'type'],
+                                      options: log[-'options'])
             end
           else
             @logs[log[-'service']] = new_log(facility: log[-'service'],
                                              levels: log[-'levels'],
-                                             destination: logfile_destination(log[-'logfile']),
-                                             cull: log[-'cull'])
+                                             raw_destination: log[-'logfile'],
+                                             destination: logfile_destination(log[-'logfile'], log[-'type'], log[-'options']),
+                                             cull: log[-'cull'],
+                                             type: log[-'type'],
+                                             options: log[-'options'])
           end
         end
       end
@@ -264,16 +286,24 @@ module Swiftcore
         @logs[-'default'] = new_log
       end
 
-      def logfile_destination(logfile, logtype = File, options = [-'ab+'])
+      def logfile_destination(logfile, type = nil, options = nil)
+        type ||= -'file'
+        options ||= [-'ab+']
         return logfile if logfile == $stderr or logfile == $stdout
-        return logfile.reopen(logfile.path, -'ab+') if logfile.respond_to? :reopen
+        return logfile.reopen(logfile.path, *options) if logfile.respond_to? :reopen
 
         if logfile =~ /^STDOUT$/i
           $stdout
         elsif logfile =~ /^STDERR$/i
           $stderr
         else
-          logtype.open(logfile, *options)
+          klassname = "Swiftcore::Analogger::Destination::#{type.capitalize}"
+          unless Object.const_defined?(klassname)
+            requirename = "swiftcore/Analogger/destination/#{type.downcase}"
+            require "#{requirename}"
+          end
+          obj = Object.const_get(klassname)
+          obj.open(logfile, *options)
         end
       end
 
@@ -339,8 +369,8 @@ module Swiftcore
 
           begin
             l.destination.fdatasync
-          rescue StandardError
-            l.destination.fsync
+          rescue Errno::EINVAL
+            l.destination.flush
           end
         end
       end
@@ -351,24 +381,29 @@ module Swiftcore
     end
 
     class Log
-      attr_reader :service, :levels, :destination, :cull
+      attr_reader :service, :levels, :raw_destination, :destination, :cull, :type, :options
 
-      def initialize(service: nil, levels: [], destination: nil, cull: true)
+      def initialize(service: nil, levels: [], raw_destination: nil, destination: nil, cull: true, type: -'file', options: [-'ab+'])
         @service = service
         @levels = levels
+        @raw_destination = raw_destination
         @destination = destination
         @cull = cull
+        @type = type
+        @options = options
       end
 
       def to_s
-        "service: #{@service}\nlevels: #{@levels.inspect}\ndestination: #{@destination}\ncull: #{@cull}\n"
+        "service: #{@service}\nlevels: #{@levels.inspect}\nraw_destination: #{@raw_destination}\ndestination: #{@destination}\ncull: #{@cull}\ntype: #{@type}\noptions: #{@options.inspect}"
       end
 
       def ==(other)
         other.service == @service &&
             other.levels == @levels &&
-            other.destination == @destination &&
-            other.cull == @cull
+            other.raw_destination == @raw_destination &&
+            other.cull == @cull &&
+            other.type == @type &&
+            other.options == @options
       end
     end
   end

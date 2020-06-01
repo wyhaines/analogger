@@ -13,8 +13,10 @@ class TestAnaloggerLog < Minitest::Test
   def test_log_basics
     log = Swiftcore::Analogger::Log.new(service: 'info',
                                         levels: Swiftcore::Analogger::DEFAULT_SEVERITY_LEVELS,
+                                        raw_destination: '/tmp/logfile',
                                         destination: '/tmp/logfile',
-                                        cull: true)
+                                        cull: true,
+                                        type: -'file')
 
     assert_equal('info', log.service)
     assert_equal(Swiftcore::Analogger::DEFAULT_SEVERITY_LEVELS, log.levels)
@@ -25,11 +27,12 @@ class TestAnaloggerLog < Minitest::Test
   def test_log_representation
     log = Swiftcore::Analogger::Log.new(service: 'info',
                                         levels: Swiftcore::Analogger::DEFAULT_SEVERITY_LEVELS,
+                                        raw_destination: '/tmp/logfile',
                                         destination: '/tmp/logfile',
                                         cull: true)
 
     assert_equal(
-      "service: #{log.service}\nlevels: #{log.levels.inspect}\ndestination: #{log.destination}\ncull: #{log.cull}\n",
+      "service: #{log.service}\nlevels: #{log.levels.inspect}\nraw_destination: #{log.raw_destination}\ndestination: #{log.destination}\ncull: #{log.cull}\ntype: #{log.type}\noptions: #{log.options.inspect}",
       log.to_s
 )
   end
@@ -37,11 +40,13 @@ class TestAnaloggerLog < Minitest::Test
   def test_log_comparisons
     log_a = Swiftcore::Analogger::Log.new(service: 'info',
                                           levels: Swiftcore::Analogger::DEFAULT_SEVERITY_LEVELS,
+                                          raw_destination: '/tmp/logfile',
                                           destination: '/tmp/logfile',
                                           cull: true)
 
     log_b = Swiftcore::Analogger::Log.new(service: 'info',
                                           levels: Swiftcore::Analogger::DEFAULT_SEVERITY_LEVELS,
+                                          raw_destination: '/tmp/logfile',
                                           destination: '/tmp/logfile',
                                           cull: false)
 

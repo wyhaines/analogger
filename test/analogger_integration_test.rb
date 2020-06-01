@@ -8,6 +8,7 @@ require 'logger'
 require 'test_support'
 SwiftcoreTestSupport.set_src_dir
 require 'swiftcore/Analogger/Client'
+require 'open3'
 
 class TestAnalogger < Minitest::Test
   # TODO: This testing framework is ancient. Better testing should be written.
@@ -27,6 +28,9 @@ class TestAnalogger < Minitest::Test
 
   def test_hup
     puts "\n\nTesting HUP\n\n"
+    stdin, socketlog, wait_thr = Open3.popen2('nc -l 127.0.0.1 47993')
+    sleep 1
+    stdin.close
     @analogger_pid = Process.spawn('../bin/analogger -c analogger.cnf -w log/analogger.pid')
 
     sleep 3
@@ -120,6 +124,9 @@ class TestAnalogger < Minitest::Test
 
   def test_usr2
     puts "\n\nTesting USR2\n\n"
+    stdin, socketlog, wait_thr = Open3.popen2('nc -l 127.0.0.1 47993')
+    sleep 1
+    stdin.close
     @analogger_pid = Process.spawn('../bin/analogger -c analogger.cnf -w log/analogger.pid')
     sleep 3
 
@@ -153,6 +160,7 @@ class TestAnalogger < Minitest::Test
 
     sleep(1)
     Process.kill 'SIGUSR2', @analogger_pid
+    stdin, socketlog, wait_thr = Open3.popen2('nc -l 127.0.0.1 47993')
     sleep(1)
 
     pid = File.read('log/analogger.pid').chomp
@@ -201,6 +209,7 @@ class TestAnalogger < Minitest::Test
     assert(logfile =~ /b|c|abc123/, "Log doesn't appear to have the expected message: b|c|abc123")
 
     logfile = File.read('log/c.log')
+    STDERR.puts "LOGFILE: #{logfile}"
     assert(logfile =~ /c|info|abc123/, "Log doesn't appear to have the expected message: c|info|abc123")
     assert(logfile =~ /c|warn|abc123/, "Log doesn't appear to have the expected message: c|warn|abc123")
     assert(logfile =~ /c|fatal|abc123/, "Log doesn't appear to have the expected message: c|fatal|abc123")
@@ -213,8 +222,12 @@ class TestAnalogger < Minitest::Test
 
   def test_analogger
     puts "\n\nTesting regular operation\n\n"
+    stdin, socketlog, wait_thr = Open3.popen2('nc -l 127.0.0.1 47993')
+    sleep 1
+    stdin.close
+
     @analogger_pid = Process.spawn('../bin/analogger -c analogger.cnf -w log/analogger.pid')
-    sleep 3
+    sleep 2
 
     pid = File.read('log/analogger.pid').chomp
 
@@ -264,6 +277,10 @@ class TestAnalogger < Minitest::Test
 
     5.times { |x| logger.log('info', "Logging to STDERR ##{x}") }
 
+    logger = Swiftcore::Analogger::Client.new('e', '127.0.0.1', '47990')
+    STDERR.puts "Logging to service e"
+    logger.log('info', "This should be received, ultimately, on another socket.\n")
+
     puts "Waiting for log sync.\n\n"
     sleep 2
 
@@ -294,6 +311,12 @@ class TestAnalogger < Minitest::Test
     logfile = File.read('log/d.log')
     assert(logfile =~ /d|info|abc123/, "Log doesn't appear to have the expected message: d|info|abc123")
     assert(logfile !~ /junk/, 'Log file has a message in it that should have been dropped.')
+
+    STDERR.puts "***** READING"
+    logfile = socketlog.readpartial(8192)
+    assert(logfile =~ /This should be received/, "Logfile didn't get what was expected from the socket. Got: #{logfile}")
+    socketlog.close
+
     teardown
 
     require 'benchmark'
@@ -318,6 +341,9 @@ class TestAnalogger < Minitest::Test
   def speedtest(label, message, random_failures = 1)
     puts "Analogger Speedtest -- #{label}"
     message = message.dup
+    stdin, socketlog, wait_thr = Open3.popen2('nc -l 127.0.0.1 47993')
+    sleep 1
+    stdin.close
     @analogger_pid = Process.spawn('../bin/analogger -c analogger.cnf -w log/analogger.pid')
     sleep 3
 
@@ -349,7 +375,7 @@ class TestAnalogger < Minitest::Test
     end
     total = Time.now - start
 
-    @analogger_pid ||= Process.spawn('../bin/analogger -c analogger.cnf -w log/analogger.pid')
+#    @analogger_pid ||= Process.spawn('../bin/analogger -c analogger.cnf -w log/analogger.pid')
     sleep 3
 
     rate = count / total
