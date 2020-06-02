@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    analogger (1.1.0)
+    analogger (1.2.0)
       async-io (~> 1.29)
       daemons (~> 1.3)
 

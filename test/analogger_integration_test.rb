@@ -312,7 +312,6 @@ class TestAnalogger < Minitest::Test
     assert(logfile =~ /d|info|abc123/, "Log doesn't appear to have the expected message: d|info|abc123")
     assert(logfile !~ /junk/, 'Log file has a message in it that should have been dropped.')
 
-    STDERR.puts "***** READING"
     logfile = socketlog.readpartial(8192)
     assert(logfile =~ /This should be received/, "Logfile didn't get what was expected from the socket. Got: #{logfile}")
     socketlog.close

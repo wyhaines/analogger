@@ -7,9 +7,6 @@ module Swiftcore
     class Destination
       class Socket < ::TCPSocket
 
-        def self.open(*args)
-          super
-        end
       end
     end
   end
