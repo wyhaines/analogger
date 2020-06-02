@@ -1,3 +1,4 @@
+---
 port: 47990
 host: 127.0.0.1
 default_log: log/default.log
@@ -12,11 +13,18 @@ logs:
   cull: true
   levels: a,b,c,d
 - service: c
-  logfile:  log/c.log
+  logfile: log/c.log
   cull: true
 - service: d
   logfile: log/d.log
   cull: false
 - service: stderr
   logfile: STDERR
+  cull: true
+  default: true
+- service: e
+  logfile: 127.0.0.1
+  type: socket
+  options:
+  - 47993
   cull: true
