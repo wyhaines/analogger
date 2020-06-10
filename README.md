@@ -3,9 +3,8 @@
 ## Overview
 
 Analogger is a fast asynchronous logging service and client library. It is
-implemented in Ruby, and currently uses EventMachine in the server, though
-there is a plan on the roadmap to enable it to run with a pure Ruby event
-reactor.
+implemented in Ruby, and currently uses [async] in the server, a pure Ruby
+event reactor.
 
 Analogger was originally written over a decade ago, in response to a need to
 maintain a central logging server to accumulate logs from numerous web
@@ -63,3 +62,5 @@ logs:
 * logs
 
   This is a list of defined logging services. Each consists of a service label, a logging destination (the path to the log file for that service), and optionally a `cull` attribute which, if true, causes analogger to deduplicate logs, eliminating consecutive repeats of the same message and instead emitting a summary of how many records like the one above the summary were culled.
+
+[async]: https://github.com/socketry/async/
